@@ -5,7 +5,7 @@
 Key features at a glance:
 
 - **Animated SVG printer visualization** — i3, CoreXY, and Cantilever styles; printed object builds up layer by layer
-- **Hotend glow effect** when above 100°C
+- **Heater glow effect** — hotend, bed, and chamber glow in the SVG when a target temperature is set
 - **Message banner** — displays Klipper error/status messages, tinted with the current state color
 - **Live stats bar** — hotend temp, bed temp, extra heaters, speed factor, flow factor
 - **Progress arc** with layer count and filament used
@@ -20,6 +20,30 @@ Key features at a glance:
 - **System sheet** (⋯ More) — firmware restart, host restart, server restart
 - **Camera section** — auto-discovered, collapsible, live streaming via `<ha-camera-stream>`
 - **Device author:** [gil](https://github.com/gilbertorconde) — 2026
+
+---
+
+## Screenshots
+
+| Main card (standby) | Main card (printing) |
+|:---:|:---:|
+| ![Card standby](screenshots/card-standby.png) | ![Card printing](screenshots/card-printing.png) |
+
+| Temperatures & progress | Cameras expanded |
+|:---:|:---:|
+| ![Card temps](screenshots/card-temps.png) | ![Card cameras](screenshots/card-cameras.png) |
+
+| Print Tuning | Misc (temps & fans) |
+|:---:|:---:|
+| ![Tune sheet](screenshots/card-tune.png) | ![Misc sheet](screenshots/misc-temps-fans.png) |
+
+| Macros |
+|:---:|
+| ![Macros sheet](screenshots/macros.png) |
+
+| Printer types: i3 | Printer types: Cantilever |
+|:---:|:---:|
+| ![i3 style](screenshots/card-i3.png) | ![Cantilever style](screenshots/card-cantilever.png) |
 
 ---
 
