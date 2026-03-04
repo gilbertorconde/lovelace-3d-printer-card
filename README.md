@@ -53,8 +53,8 @@ resources:
 
 ```yaml
 type: custom:lovelace-3d-printer-card
-name: Gilbot Nova
-base_entity: gilbot_nova
+name: Voron 2.4
+base_entity: voron_24
 printer_type: i3
 ```
 
@@ -62,13 +62,13 @@ printer_type: i3
 
 ```yaml
 type: custom:lovelace-3d-printer-card
-name: Gilbot Nova
-base_entity: gilbot_nova
+name: Voron 2.4
+base_entity: voron_24
 printer_type: i3
 cameras:
-  - entity: camera.gilbot_nova_back
+  - entity: camera.voron_24_back
     rotate: 180
-  - entity: camera.gilbot_nova_top
+  - entity: camera.voron_24_top
     rotate: 90
 ```
 
@@ -76,8 +76,8 @@ cameras:
 
 ```yaml
 type: custom:lovelace-3d-printer-card
-name: Gilbot Nova
-base_entity: gilbot_nova
+name: Voron 2.4
+base_entity: voron_24
 power_switch: switch.printer_smart_plug
 ```
 
@@ -87,7 +87,7 @@ power_switch: switch.printer_smart_plug
 
 | Key | Type | Required | Description |
 |---|---|---|---|
-| `base_entity` | string | **Yes** | Entity name prefix, e.g. `gilbot_nova` |
+| `base_entity` | string | **Yes** | Entity name prefix, e.g. `voron_24` |
 | `name` | string | No | Display name shown in the card header |
 | `printer_type` | string | No | `i3` (default), `corexy`, or `cantilever` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
@@ -155,7 +155,7 @@ When multiple entities match the same role (e.g. an alias sensor), the one with 
 
 ### Labels
 
-Display labels always come from the entity's `friendly_name` attribute, with the device prefix (e.g. `"Gilbot Nova "`) and trailing `" Temperature"` / `" Temp"` stripped. The entity ID is only used as a fallback if `friendly_name` is absent.
+Display labels always come from the entity's `friendly_name` attribute, with the device prefix (e.g. `"Voron 2.4 "`) and trailing `" Temperature"` / `" Temp"` stripped. The entity ID is only used as a fallback if `friendly_name` is absent.
 
 ---
 

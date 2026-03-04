@@ -10,7 +10,7 @@
 // Usage:
 //   type: custom:lovelace-3d-printer-card
 //   name: My Printer
-//   base_entity: gilbot_nova
+//   base_entity: voron_24
 //   printer_type: i3          # i3 | corexy | cantilever
 //
 // All entity IDs are auto-derived from base_entity, with optional overrides:
