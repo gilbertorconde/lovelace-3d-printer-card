@@ -1,0 +1,6 @@
+{
+  "name": "Lovelace 3D Printer Card",
+  "content_in_root": true,
+  "filename": "lovelace-3d-printer-card.js",
+  "homeassistant": "2023.4.0"
+}
