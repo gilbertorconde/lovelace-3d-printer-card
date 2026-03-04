@@ -321,9 +321,11 @@ function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, 
 }
 
 function renderPrinterSVG(printerType, progress, hotendTarget, bedTarget, chamberTarget, isPrinting, nozzleX) {
-  const hotendOn = (hotendTarget != null && hotendTarget > 0);
-  const bedOn = (bedTarget != null && bedTarget > 0);
-  const chamberOn = (chamberTarget != null && chamberTarget > 0);
+  // Use Number() to handle string "0"/"0.0" etc. - ensures 0 is treated as off
+  const isTargetSet = (t) => t != null && !isNaN(Number(t)) && Number(t) > 0;
+  const hotendOn = isTargetSet(hotendTarget);
+  const bedOn = isTargetSet(bedTarget);
+  const chamberOn = isTargetSet(chamberTarget);
   const p = Math.min(1, Math.max(0, progress / 100));
   const nx = Math.min(1, Math.max(0, nozzleX));
   switch ((printerType || 'i3').toLowerCase()) {
@@ -434,10 +436,11 @@ class PrinterCard3D extends HTMLElement {
 
     // Well-known number suffixes → role key
     const NUMBER_ROLES = [
-      [['extruder_target'],  'hotend_target'],
-      [['bed_target'],       'bed_target'],
-      [['speed_factor'],     'speed_factor'],
-      [['flow_factor'],      'flow_factor'],
+      [['extruder_target'],       'hotend_target'],
+      [['bed_target'],            'bed_target'],
+      [['heater_chamber_target'], 'chamber_target'],
+      [['speed_factor'],          'speed_factor'],
+      [['flow_factor'],           'flow_factor'],
     ];
 
     // Well-known button suffixes → role key
@@ -687,13 +690,12 @@ class PrinterCard3D extends HTMLElement {
       if (this._nozzleX <= 0) { this._nozzleX = 0; this._nozzleDir = 1; }
       const svgEl = this.shadowRoot.querySelector('.printer-svg-wrap');
       if (svgEl) {
-        const ch = this._heaters.find(h => h.entity_id && h.entity_id.toLowerCase().includes('chamber'));
         svgEl.innerHTML = renderPrinterSVG(
           this._config.printer_type,
           this._numVal('progress') || 0,
           this._numVal('hotend_target'),
           this._numVal('bed_target'),
-          ch?.target ?? null,
+          this._numVal('chamber_target') ?? this._heaters.find(h => h.entity_id?.toLowerCase().includes('chamber'))?.target ?? null,
           true,
           this._nozzleX
         );
@@ -858,10 +860,10 @@ class PrinterCard3D extends HTMLElement {
       : (currentLayer != null ? `Layer ${Math.round(currentLayer)}` : null);
 
     const hotendStr = hotendTemp != null
-      ? (hotendTarget ? `${Math.round(hotendTemp)}° / ${Math.round(hotendTarget)}°` : fmtTemp(hotendTemp))
+      ? (hotendTarget ? `${Math.round(hotendTemp)}°/${Math.round(hotendTarget)}°` : fmtTemp(hotendTemp))
       : null;
     const bedStr = bedTemp != null
-      ? (bedTarget ? `${Math.round(bedTemp)}° / ${Math.round(bedTarget)}°` : fmtTemp(bedTemp))
+      ? (bedTarget ? `${Math.round(bedTemp)}°/${Math.round(bedTarget)}°` : fmtTemp(bedTemp))
       : null;
 
     const hasPause    = this._entityExists('pause');
@@ -903,7 +905,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Printer SVG -->
       <div class="printer-section">
         <div class="printer-svg-wrap">
-          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
+          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, this._numVal('chamber_target') ?? chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
         </div>
       </div>
 
@@ -919,11 +921,15 @@ class PrinterCard3D extends HTMLElement {
           <span class="stat-val bed-val">${bedStr}</span>
           <span class="stat-label">Bed</span>
         </div>` : ''}
-        ${this._heaters.filter(h => !h.readonly && h.target_entity).map(h => `<div class="stat-item">
+        ${this._heaters.filter(h => !h.readonly && h.target_entity).map(h => {
+          const cur = h.current != null ? Math.round(h.current) + '°' : '—';
+          const val = h.target != null ? `${cur}/${Math.round(h.target)}°` : cur;
+          return `<div class="stat-item">
           <span class="stat-icon">${ICON_THERMOMETER}</span>
-          <span class="stat-val" style="color:#a78bfa">${h.current != null ? Math.round(h.current) + '°' : '—'}</span>
+          <span class="stat-val" style="color:#a78bfa">${val}</span>
           <span class="stat-label">${h.label}</span>
-        </div>`).join('')}
+        </div>`;
+        }).join('')}
         ${speedFactor != null ? `<div class="stat-item">
           <span class="stat-icon">${ICON_SPEED}</span>
           <span class="stat-val">${fmtPct(speedFactor)}</span>
@@ -1480,12 +1486,12 @@ class PrinterCard3D extends HTMLElement {
 
 /* ── Stats bar ── */
 .stats-bar { display:flex; justify-content:space-around; gap:4px; margin:8px 0 12px; flex-wrap:wrap; }
-.stat-item { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; min-width:56px; }
+.stat-item { display:flex; flex-direction:column; align-items:space-between; gap:2px; flex:1; min-width:56px; }
 .stat-icon { color:var(--secondary-text-color); line-height:1; opacity:.7; }
 .stat-val { font-family:'Share Tech Mono',monospace; font-size:.85rem; font-weight:600; color:var(--primary-text-color); }
 .hotend-val { color:#ff8c66; }
 .bed-val    { color:#66b2ff; }
-.stat-label { font-size:.68rem; color:var(--secondary-text-color); opacity:.7; text-transform:uppercase; letter-spacing:.06em; }
+.stat-label { font-size:.68rem; color:var(--secondary-text-color); opacity:.7; text-transform:uppercase; letter-spacing:.06em; text-align:center; }
 
 /* ── Separator ── */
 .sep { height:1px; background:var(--divider-color,rgba(255,255,255,.08)); margin:8px 0; }
