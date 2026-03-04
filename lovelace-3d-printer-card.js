@@ -36,6 +36,8 @@ const STATE_COLORS = {
   'resuming':   '#4caf50',
   'loading':    '#42a5f5',
   'complete':   '#4caf50',
+  'startup':    '#42a5f5',
+  'shutdown':   '#757575',
   'offline':    '#757575',
   'unknown':    '#757575',
 };
@@ -139,10 +141,9 @@ function arcPath(cx, cy, r, startDeg, sweepDeg) {
 }
 
 // ── SVG Printer Graphics ──────────────────────────────────────────────────────
-function _buildObject(progress, x, bedWidth, maxHeight, objectWidth) {
+function _buildObject(progress, maxHeight, objectWidth) {
   const TOTAL_LINES = 12;
   const lineH = maxHeight / TOTAL_LINES;
-  const objX = x - objectWidth / 2;
   const filled = Math.round(progress * TOTAL_LINES);
   let lines = '';
   for (let i = 0; i < TOTAL_LINES; i++) {
@@ -150,9 +151,9 @@ function _buildObject(progress, x, bedWidth, maxHeight, objectWidth) {
     const y = 0 + i * lineH;
     const isDone = lineIdx < filled;
     if (isDone) {
-      lines += `<rect x="${objX}" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="currentColor" opacity="0.85"/>`;
+      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="currentColor" opacity="0.85"/>`;
     } else {
-      lines += `<rect x="${objX}" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.3" stroke-dasharray="3 2"/>`;
+      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.3" stroke-dasharray="3 2"/>`;
     }
   }
   return `<g class="print-object">${lines}</g>`;
@@ -181,7 +182,7 @@ function svgPrinterI3(progress, hotendOn, isPrinting, nozzleX) {
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;0,0;-3,0;0,0" dur="4s" repeatCount="indefinite"/>`
     : '';
-  const objectLines = progress > 0 ? _buildObject(progress, W / 2, bedW, objH, objW - 4) : '';
+  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
   <rect x="${rodLeft - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
   <rect x="${rodRight - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
@@ -225,7 +226,7 @@ function svgPrinterCoreXY(progress, hotendOn, isPrinting, nozzleX) {
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;-3,0;0,0" dur="3s" repeatCount="indefinite"/>`
     : '';
-  const objectLines = progress > 0 ? _buildObject(progress, W / 2, bedW, objH, objW - 4) : '';
+  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
   <rect x="${frameLeft}" y="${frameTop}" width="${frameW}" height="${frameH}" rx="4" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.35"/>
   <rect x="${frameLeft - 4}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
@@ -275,7 +276,7 @@ function svgPrinterCantilever(progress, hotendOn, isPrinting, nozzleX) {
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;4,0;0,0;-4,0;0,0" dur="3.5s" repeatCount="indefinite"/>`
     : '';
-  const objectLines = progress > 0 ? _buildObject(progress, W / 2, bedW, objH, objW - 4) : '';
+  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
   <rect x="${baseLeft}" y="${baseY}" width="${baseRight - baseLeft}" height="12" rx="4" fill="${frameColor}" opacity="0.25"/>
   <line x1="${baseLeft + 6}" y1="${baseY}" x2="${baseLeft + 6}" y2="${uprightBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.3" stroke-linecap="round"/>
@@ -341,6 +342,9 @@ class PrinterCard3D extends HTMLElement {
     this._animRunning = false;
     this._camerasOpen = false;
     this._dragging = false;
+    this._thumbFailed = false;
+    this._thumbLoaded = false;
+    this._lastThumbSrc = null;
     this._bound_click = this._onClick.bind(this);
     this._bound_change = this._onChange.bind(this);
     this._bound_pointerdown = this._onPointerDown.bind(this);
@@ -385,7 +389,8 @@ class PrinterCard3D extends HTMLElement {
 
     // Well-known sensor suffixes → role key
     const SENSOR_ROLES = [
-      [['current_print_state', 'printer_state'],                      'status'],
+      [['current_print_state'],                                       'status'],
+      [['printer_state'],                                             'printer_state'],
       [['progress'],                                                   'progress'],
       [['print_duration'],                                             'duration'],
       [['print_eta', 'print_time_left'],                               'eta'],
@@ -462,13 +467,16 @@ class PrinterCard3D extends HTMLElement {
         if (role) {
           // Prefer a valid-state entity over an unknown/unavailable one
           const existing = this._entities[role];
+          const isNewGood = st.state !== 'unknown' && st.state !== 'unavailable';
           if (!existing) {
-            this._entities[role] = id;
+            if (isNewGood) this._entities[role] = id;
           } else {
             const existingSt = this._hass.states[existing];
             const isExistingBad = !existingSt || existingSt.state === 'unknown' || existingSt.state === 'unavailable';
-            const isNewGood = st.state !== 'unknown' && st.state !== 'unavailable';
-            if (isExistingBad && isNewGood) this._entities[role] = id;
+            // Prefer canonical temp sensors over short aliases (extruder_temperature > extruder_temp, bed_temperature > bed_temp)
+            const preferNew = (role === 'hotend' && id.includes('extruder_temperature') && existing.includes('extruder_temp'))
+              || (role === 'bed' && id.includes('bed_temperature') && existing.includes('bed_temp'));
+            if ((isExistingBad && isNewGood) || preferNew) this._entities[role] = id;
           }
         } else {
           // Collect unclaimed temp sensors for second pass
@@ -623,14 +631,22 @@ class PrinterCard3D extends HTMLElement {
   _stVal(key) { return stVal(this._hass, this._entities[key]); }
   _numVal(key) { return numVal(this._hass, this._entities[key]); }
 
+  // Combines printer_state (ready/startup/shutdown/error) with current_print_state (standby/printing/paused/complete/cancelled/error)
+  _effectiveStatus() {
+    const printerState = (this._stVal('printer_state') || '').toLowerCase();
+    const printState = (this._stVal('status') || '').toLowerCase();
+    if (printerState === 'error' || printerState === 'shutdown' || printerState === 'startup') return printerState;
+    return printState || printerState || 'idle';
+  }
+
   _isPrinting() {
-    const s = (this._stVal('status') || '').toLowerCase();
-    return s.includes('print') && !s.includes('cancel') && !s.includes('paused') && !s.includes('complete');
+    const s = this._effectiveStatus();
+    return s === 'printing';
   }
 
   _isPaused() {
-    const s = (this._stVal('status') || '').toLowerCase();
-    return s.includes('pause');
+    const s = this._effectiveStatus();
+    return s === 'paused';
   }
 
   // ── Animation ───────────────────────────────────────────────────────────────
@@ -705,7 +721,7 @@ class PrinterCard3D extends HTMLElement {
     // Resolve all entities from hass (single pass crawler)
     this._crawlEntities();
 
-    const status = this._stVal('status') || 'idle';
+    const status = this._effectiveStatus();
     const mc = stateColor(status);
     card.style.setProperty('--mode-color', mc);
     card.style.setProperty('--chip-bg', hexA(mc, 0.15));
@@ -727,13 +743,30 @@ class PrinterCard3D extends HTMLElement {
       const section = this.shadowRoot.querySelector('.cameras-section');
       if (section) { section.classList.add('open'); this._wireCameraStreams(); }
     }
+
+    // Thumbnail img: only show after onload (valid image); onerror shows fallback
+    const thumbImg = this.shadowRoot.querySelector('.thumb-img');
+    if (thumbImg) {
+      thumbImg.onload = () => {
+        if (this._thumbLoaded) return;
+        this._thumbLoaded = true;
+        this._thumbFailed = false;
+        this._render();
+      };
+      thumbImg.onerror = () => {
+        if (this._thumbFailed) return;
+        this._thumbFailed = true;
+        this._thumbLoaded = false;
+        this._render();
+      };
+    }
   }
 
   // ── HTML template ───────────────────────────────────────────────────────────
 
   _html() {
     const cfg = this._config;
-    const status = this._stVal('status') || 'idle';
+    const status = this._effectiveStatus();
     const statusLabel = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
     const progress = this._numVal('progress') || 0;
     const hotendTemp = this._numVal('hotend');
@@ -751,15 +784,22 @@ class PrinterCard3D extends HTMLElement {
     const isPaused = this._isPaused();
     const isActive = isPrinting || isPaused;
 
-    // Thumbnail: only show when printing/paused AND camera has a valid state
+    // Thumbnail: only show after confirming the URL returns a valid image (onload); fall back to icon on error
     const thumbEntityId = this._entities.thumbnail;
     const thumbState = thumbEntityId ? this._hass.states[thumbEntityId] : null;
-    const thumbCameraActive = !!(thumbState && thumbState.state !== 'unavailable' && thumbState.state !== 'unknown');
-    const hasThumb = isActive && thumbCameraActive;
     const thumbToken = thumbState?.attributes?.access_token || '';
-    const thumbSrc = hasThumb
-      ? `${location.origin}/api/camera_proxy/${thumbEntityId}?token=${thumbToken}&t=${Date.now()}`
+    const thumbT = Math.floor(Date.now() / 5000) * 5000; // 5s cache buster so URL is stable for load check
+    const thumbSrc = thumbEntityId
+      ? `${location.origin}/api/camera_proxy/${thumbEntityId}?token=${thumbToken}&t=${thumbT}`
       : '';
+    if (!thumbEntityId || !(isPrinting || isPaused)) this._lastThumbSrc = null;
+    else if (thumbSrc && this._lastThumbSrc !== thumbSrc) {
+      this._lastThumbSrc = thumbSrc;
+      this._thumbLoaded = false;
+      this._thumbFailed = false;
+    }
+    const hasThumb = !!(thumbEntityId && (isPrinting || isPaused));
+    const showThumb = hasThumb && this._thumbLoaded && !this._thumbFailed;
 
     // ETA
     let etaSecs = this._numVal('eta');
@@ -899,8 +939,11 @@ class PrinterCard3D extends HTMLElement {
         </div>
 
         <!-- File tile — with optional thumbnail -->
-        <div class="tile tile-file ${!filename ? 'tile-dim' : ''} ${hasThumb ? 'tile-has-thumb' : ''} ${isActive && hasThumb ? 'tile-file-active' : ''}">
-          ${hasThumb ? `<img class="thumb-img" src="${thumbSrc}" alt="thumbnail"/>` : `<div class="tile-icon">${ICON_FILE}</div>`}
+        <div class="tile tile-file ${!filename ? 'tile-dim' : ''} ${hasThumb ? 'tile-has-thumb' : ''} ${isActive && showThumb ? 'tile-file-active' : ''}">
+          ${hasThumb ? `<div class="thumb-wrap ${showThumb ? 'thumb-loaded' : ''} ${this._thumbFailed ? 'thumb-failed' : ''}">
+            <img class="thumb-img" src="${thumbSrc}" alt="thumbnail"/>
+            <div class="tile-icon thumb-fallback">${ICON_FILE}</div>
+          </div>` : `<div class="tile-icon">${ICON_FILE}</div>`}
           <div class="tile-file-info">
             <div class="tile-label">File</div>
             <div class="tile-value tile-filename">
@@ -1432,6 +1475,14 @@ class PrinterCard3D extends HTMLElement {
 .tile-file { grid-column: span 2; flex-direction: row; align-items: center; gap: 10px; }
 .tile-has-thumb { }
 .tile-file-active .thumb-img { width: 100px; height: 76px; }
+.thumb-wrap { position:relative; flex-shrink:0; }
+.thumb-wrap .thumb-img { display:none; }
+.thumb-wrap .thumb-fallback { display:flex; width:72px; height:56px; align-items:center; justify-content:center; border-radius:6px; background:rgba(0,0,0,.2); }
+.thumb-wrap.thumb-loaded .thumb-img { display:block; }
+.thumb-wrap.thumb-loaded .thumb-fallback { display:none; }
+.thumb-wrap.thumb-failed .thumb-img { display:none; }
+.thumb-wrap.thumb-failed .thumb-fallback { display:flex; }
+.tile-file-active .thumb-wrap .thumb-fallback { width:100px; height:76px; }
 .thumb-img { width: 72px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,.3); }
 .tile-file-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 
@@ -1465,7 +1516,7 @@ class PrinterCard3D extends HTMLElement {
 .overlay.visible { opacity:1; pointer-events:all; }
 
 /* ── Bottom sheet ── */
-.sheet { position:absolute; left:0; right:0; bottom:0; background:var(--card-background-color,#1c1c1e); border-radius:16px 16px 0 0; padding:12px 16px 0; z-index:20; transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); box-shadow:0 -4px 24px rgba(0,0,0,.4); max-height:72vh; display:flex; flex-direction:column; }
+.sheet { position:absolute; left:0; right:0; bottom:0; background:var(--card-background-color,#1c1c1e); border-radius:16px 16px 0 0; padding:12px 16px 24px; z-index:20; transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); box-shadow:0 -4px 24px rgba(0,0,0,.4); max-height:72vh; display:flex; flex-direction:column; }
 .sheet.open { transform:translateY(0); }
 .sheet-handle { width:36px; height:4px; background:var(--divider-color,rgba(255,255,255,.15)); border-radius:2px; margin:0 auto 12px; flex-shrink:0; }
 .sheet-title { display:flex; align-items:center; gap:8px; font-size:.95rem; font-weight:600; margin-bottom:16px; color:var(--mode-color); flex-shrink:0; }
@@ -1485,7 +1536,7 @@ class PrinterCard3D extends HTMLElement {
 .tune-row-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .tune-row-label { display:flex; align-items:center; gap:6px; font-size:.85rem; font-weight:600; color:var(--secondary-text-color); }
 .tune-row-val { font-size:.88rem; font-weight:700; color:var(--mode-color); }
-.tune-slider { width:100%; appearance:none; height:4px; border-radius:2px; background:var(--divider-color,rgba(255,255,255,.15)); outline:none; cursor:pointer; accent-color:var(--mode-color); }
+.tune-slider { width:99%; appearance:none; height:4px; border-radius:2px; background:var(--divider-color,rgba(255,255,255,.15)); outline:none; cursor:pointer; accent-color:var(--mode-color); }
 .tune-slider::-webkit-slider-thumb { appearance:none; width:18px; height:18px; border-radius:50%; background:var(--mode-color); cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.4); }
 
 /* ── Macros sheet ── */

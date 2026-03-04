@@ -10,7 +10,7 @@ Key features at a glance:
 - **Live stats bar** — hotend temp, bed temp, extra heaters, speed factor, flow factor
 - **Progress arc** with layer count and filament used
 - **ETA and elapsed time** tiles
-- **Filename tile** with automatic thumbnail preview (during active prints)
+- **Filename tile** with automatic thumbnail preview when printing/paused (shown only after confirming the feed returns a valid image; falls back to file icon otherwise)
 - **Print controls** — Pause / Resume / Cancel / Emergency Stop (double-tap required for E-Stop)
 - **Auto-discovery** — all entities crawled from `base_entity` prefix; no manual entity config required
 - **Tune sheet** — speed factor and flow factor sliders
@@ -107,7 +107,8 @@ Any entity with `attributes.hidden === true` is skipped entirely. This filters o
 
 | Role | Matched suffix(es) |
 |---|---|
-| Status | `current_print_state`, `printer_state` |
+| Status | `current_print_state` (values: `standby`, `printing`, `paused`, `complete`, `cancelled`, `error`) |
+| Printer state | `printer_state` (values: `ready`, `startup`, `shutdown`, `error`) — combined with status for display; `error`/`shutdown`/`startup` take precedence |
 | Progress | `progress` |
 | Duration | `print_duration` |
 | ETA | `print_eta`, `print_time_left` |
@@ -150,7 +151,7 @@ When multiple entities match the same role (e.g. an alias sensor), the one with 
 - **Macros** — `button.*_macro_*` → Macros sheet
 - **Temperature sensors** — `sensor.*` with unit `°C`/`°F`, not matched to a well-known role → paired with a `number.*_target` entity → Misc sheet as settable heater. Sensors with no matching target are read-only.
 - **Fans/outputs** — `number.*` matching `fan|filter|exhaust|output_pin`, not already claimed → Misc sheet as sliders
-- **Thumbnail** — `camera.*_thumbnail` → file tile thumbnail image (only shown during active prints)
+- **Thumbnail** — `camera.*_thumbnail` → file tile thumbnail image (shown when state is `printing` or `paused`, only after the URL returns a valid image; falls back to file icon if the feed is empty or fails)
 - **Live cameras** — all other `camera.*` entities → collapsible camera section
 
 ### Labels
