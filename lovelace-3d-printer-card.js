@@ -1487,8 +1487,8 @@ class PrinterCard3D extends HTMLElement {
 /* ── Stats bar ── */
 .stats-bar { display:flex; justify-content:space-around; gap:4px; margin:8px 0 12px; flex-wrap:wrap; }
 .stat-item { display:flex; flex-direction:column; align-items:space-between; gap:2px; flex:1; min-width:56px; }
-.stat-icon { color:var(--secondary-text-color); line-height:1; opacity:.7; }
-.stat-val { font-family:'Share Tech Mono',monospace; font-size:.85rem; font-weight:600; color:var(--primary-text-color); }
+.stat-icon { color:var(--secondary-text-color); line-height:1; opacity:.7; text-align:center;}
+.stat-val { font-family:'Share Tech Mono',monospace; font-size:.85rem; font-weight:600; color:var(--primary-text-color); text-align:center;}
 .hotend-val { color:#ff8c66; }
 .bed-val    { color:#66b2ff; }
 .stat-label { font-size:.68rem; color:var(--secondary-text-color); opacity:.7; text-transform:uppercase; letter-spacing:.06em; text-align:center; }
