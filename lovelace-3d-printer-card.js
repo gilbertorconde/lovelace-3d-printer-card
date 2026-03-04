@@ -159,7 +159,7 @@ function _buildObject(progress, maxHeight, objectWidth) {
   return `<g class="print-object">${lines}</g>`;
 }
 
-function svgPrinterI3(progress, hotendOn, isPrinting, nozzleX) {
+function svgPrinterI3(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
   const W = 200, H = 180;
   const frameColor = 'var(--primary-text-color)';
   const accentColor = 'var(--mode-color)';
@@ -179,11 +179,18 @@ function svgPrinterI3(progress, hotendOn, isPrinting, nozzleX) {
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
+  const bedGlow = bedOn
+    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
+    : '';
+  const chamberGlow = chamberOn
+    ? `<rect x="${rodLeft - 10}" y="${rodTop - 10}" width="${rodRight - rodLeft + 20}" height="${rodBottom - rodTop + 25}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
+    : '';
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;0,0;-3,0;0,0" dur="4s" repeatCount="indefinite"/>`
     : '';
   const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
+  ${chamberGlow}
   <rect x="${rodLeft - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
   <rect x="${rodRight - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
   <line x1="${rodLeft}" y1="${rodTop}" x2="${rodLeft}" y2="${rodBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.45" stroke-linecap="round"/>
@@ -192,8 +199,9 @@ function svgPrinterI3(progress, hotendOn, isPrinting, nozzleX) {
   <line x1="${rodLeft + 6}" y1="${gantryY}" x2="${rodRight - 6}" y2="${gantryY}" stroke="${frameColor}" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
   <rect x="${rodLeft - 4}" y="${gantryY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
   <rect x="${rodRight - 10}" y="${gantryY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
+  ${bedGlow}
   <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${accentColor}" opacity="0.4"/>
+  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
   <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
@@ -202,7 +210,7 @@ function svgPrinterI3(progress, hotendOn, isPrinting, nozzleX) {
 </svg>`;
 }
 
-function svgPrinterCoreXY(progress, hotendOn, isPrinting, nozzleX) {
+function svgPrinterCoreXY(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
   const W = 200, H = 180;
   const frameColor = 'var(--primary-text-color)';
   const accentColor = 'var(--mode-color)';
@@ -223,11 +231,18 @@ function svgPrinterCoreXY(progress, hotendOn, isPrinting, nozzleX) {
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
+  const bedGlow = bedOn
+    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
+    : '';
+  const chamberGlow = chamberOn
+    ? `<rect x="${frameLeft - 8}" y="${frameTop - 8}" width="${frameW + 16}" height="${frameH + 16}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
+    : '';
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;-3,0;0,0" dur="3s" repeatCount="indefinite"/>`
     : '';
   const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
+  ${chamberGlow}
   <rect x="${frameLeft}" y="${frameTop}" width="${frameW}" height="${frameH}" rx="4" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.35"/>
   <rect x="${frameLeft - 4}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
   <rect x="${frameRight - 6}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
@@ -237,19 +252,20 @@ function svgPrinterCoreXY(progress, hotendOn, isPrinting, nozzleX) {
   <rect x="${nozzleXPos - 12}" y="${railY - 7}" width="24" height="14" rx="3" fill="${accentColor}" opacity="0.85"/>
   <circle cx="${frameLeft + 10}" cy="${railY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
   <circle cx="${frameRight - 10}" cy="${railY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
-  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${accentColor}" opacity="0.4"/>
-  <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <line x1="${frameLeft + 12}" y1="${railY + 20}" x2="${frameLeft + 12}" y2="${bedY + 5}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
   <line x1="${frameRight - 12}" y1="${railY + 20}" x2="${frameRight - 12}" y2="${bedY + 5}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
+  ${bedGlow}
+  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
+  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
+  <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
+  <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
   ${hotendGlow}
   <g transform="translate(${nozzleXPos}, ${railY + 7})">${nozzleAnim}<polygon points="-4,0 4,0 0,10" fill="${hotendOn ? '#ff8c00' : accentColor}" opacity="${hotendOn ? '1' : '0.7'}"/></g>
 </svg>`;
 }
 
-function svgPrinterCantilever(progress, hotendOn, isPrinting, nozzleX) {
+function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
   const W = 200, H = 180;
   const frameColor = 'var(--primary-text-color)';
   const accentColor = 'var(--mode-color)';
@@ -273,11 +289,18 @@ function svgPrinterCantilever(progress, hotendOn, isPrinting, nozzleX) {
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${armY + 16}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
+  const bedGlow = bedOn
+    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
+    : '';
+  const chamberGlow = chamberOn
+    ? `<rect x="${baseLeft - 8}" y="${uprightTop - 8}" width="${baseRight - baseLeft + 16}" height="${uprightBottom - uprightTop + 20}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
+    : '';
   const nozzleAnim = isPrinting
     ? `<animateTransform attributeName="transform" type="translate" values="0,0;4,0;0,0;-4,0;0,0" dur="3.5s" repeatCount="indefinite"/>`
     : '';
   const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
+  ${chamberGlow}
   <rect x="${baseLeft}" y="${baseY}" width="${baseRight - baseLeft}" height="12" rx="4" fill="${frameColor}" opacity="0.25"/>
   <line x1="${baseLeft + 6}" y1="${baseY}" x2="${baseLeft + 6}" y2="${uprightBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.3" stroke-linecap="round"/>
   <rect x="${uprightX - 5}" y="${uprightTop}" width="12" height="${uprightBottom - uprightTop}" rx="3" fill="${frameColor}" opacity="0.2"/>
@@ -286,8 +309,9 @@ function svgPrinterCantilever(progress, hotendOn, isPrinting, nozzleX) {
   <rect x="${uprightX - 3}" y="${armY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
   <line x1="${uprightX + 6}" y1="${armY}" x2="${armRight}" y2="${armY}" stroke="${frameColor}" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
   <rect x="${nozzleXPos - 10}" y="${armY - 7}" width="20" height="14" rx="3" fill="${accentColor}" opacity="0.9"/>
+  ${bedGlow}
   <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${accentColor}" opacity="0.4"/>
+  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
   <line x1="${bedX + 10}" y1="${bedY + 3}" x2="${bedX + bedW - 10}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <line x1="${bedX + 10}" y1="${bedY + 6}" x2="${bedX + bedW - 10}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
   <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
@@ -296,14 +320,16 @@ function svgPrinterCantilever(progress, hotendOn, isPrinting, nozzleX) {
 </svg>`;
 }
 
-function renderPrinterSVG(printerType, progress, hotendTemp, isPrinting, nozzleX) {
+function renderPrinterSVG(printerType, progress, hotendTemp, bedTemp, chamberTemp, isPrinting, nozzleX) {
   const hotendOn = (hotendTemp != null && hotendTemp > 100);
+  const bedOn = (bedTemp != null && bedTemp > 40);
+  const chamberOn = (chamberTemp != null && chamberTemp > 30);
   const p = Math.min(1, Math.max(0, progress / 100));
   const nx = Math.min(1, Math.max(0, nozzleX));
   switch ((printerType || 'i3').toLowerCase()) {
-    case 'corexy': return svgPrinterCoreXY(p, hotendOn, isPrinting, nx);
-    case 'cantilever': return svgPrinterCantilever(p, hotendOn, isPrinting, nx);
-    default: return svgPrinterI3(p, hotendOn, isPrinting, nx);
+    case 'corexy': return svgPrinterCoreXY(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
+    case 'cantilever': return svgPrinterCantilever(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
+    default: return svgPrinterI3(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
   }
 }
 
@@ -661,10 +687,13 @@ class PrinterCard3D extends HTMLElement {
       if (this._nozzleX <= 0) { this._nozzleX = 0; this._nozzleDir = 1; }
       const svgEl = this.shadowRoot.querySelector('.printer-svg-wrap');
       if (svgEl) {
+        const ch = this._heaters.find(h => h.entity_id && h.entity_id.toLowerCase().includes('chamber'));
         svgEl.innerHTML = renderPrinterSVG(
           this._config.printer_type,
           this._numVal('progress') || 0,
           this._numVal('hotend'),
+          this._numVal('bed'),
+          ch?.current ?? null,
           true,
           this._nozzleX
         );
@@ -773,6 +802,8 @@ class PrinterCard3D extends HTMLElement {
     const hotendTarget = this._numVal('hotend_target');
     const bedTemp = this._numVal('bed');
     const bedTarget = this._numVal('bed_target');
+    const chamberHeater = this._heaters.find(h => h.entity_id && h.entity_id.toLowerCase().includes('chamber'));
+    const chamberTemp = chamberHeater?.current ?? null;
     const durationSecs = this._numVal('duration');
     const currentLayer = this._numVal('current_layer');
     const totalLayers = this._numVal('total_layers');
@@ -872,7 +903,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Printer SVG -->
       <div class="printer-section">
         <div class="printer-svg-wrap">
-          ${renderPrinterSVG(cfg.printer_type, progress, hotendTemp, isPrinting, this._nozzleX)}
+          ${renderPrinterSVG(cfg.printer_type, progress, hotendTemp, bedTemp, chamberTemp, isPrinting, this._nozzleX)}
         </div>
       </div>
 
@@ -955,11 +986,15 @@ class PrinterCard3D extends HTMLElement {
 
       <div class="sep"></div>
 
-      <!-- Controls -->
-      <div class="controls">
+      <!-- Print controls (only when print is running) -->
+      ${isActive && (hasPause || hasResume || hasCancel) ? `<div class="controls controls-print">
         ${isPrinting && hasPause ? `<button class="ctrl-btn ctrl-pause" data-action="pause">${ICON_PAUSE} Pause</button>` : ''}
         ${isPaused && hasResume ? `<button class="ctrl-btn ctrl-resume" data-action="resume">${ICON_PLAY} Resume</button>` : ''}
-        ${isActive && hasCancel ? `<button class="ctrl-btn ctrl-cancel" data-action="cancel">${ICON_STOP} Cancel</button>` : ''}
+        ${hasCancel ? `<button class="ctrl-btn ctrl-cancel" data-action="cancel">${ICON_STOP} Cancel</button>` : ''}
+      </div>` : ''}
+
+      <!-- Other controls -->
+      <div class="controls">
         ${hasSpeedTuning ? `<button class="ctrl-btn ctrl-tune" data-action="open-speed">${ICON_TUNE} Tune</button>` : ''}
         ${hasMacros ? `<button class="ctrl-btn ctrl-tune" data-action="open-macros">${ICON_MACRO} Macros</button>` : ''}
         ${hasMovement ? `<button class="ctrl-btn ctrl-tune" data-action="open-movement">${ICON_MOVE} Move</button>` : ''}
