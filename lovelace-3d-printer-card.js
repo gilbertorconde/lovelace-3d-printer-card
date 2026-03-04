@@ -320,10 +320,10 @@ function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, 
 </svg>`;
 }
 
-function renderPrinterSVG(printerType, progress, hotendTemp, bedTemp, chamberTemp, isPrinting, nozzleX) {
-  const hotendOn = (hotendTemp != null && hotendTemp > 100);
-  const bedOn = (bedTemp != null && bedTemp > 40);
-  const chamberOn = (chamberTemp != null && chamberTemp > 30);
+function renderPrinterSVG(printerType, progress, hotendTarget, bedTarget, chamberTarget, isPrinting, nozzleX) {
+  const hotendOn = (hotendTarget != null && hotendTarget > 0);
+  const bedOn = (bedTarget != null && bedTarget > 0);
+  const chamberOn = (chamberTarget != null && chamberTarget > 0);
   const p = Math.min(1, Math.max(0, progress / 100));
   const nx = Math.min(1, Math.max(0, nozzleX));
   switch ((printerType || 'i3').toLowerCase()) {
@@ -691,9 +691,9 @@ class PrinterCard3D extends HTMLElement {
         svgEl.innerHTML = renderPrinterSVG(
           this._config.printer_type,
           this._numVal('progress') || 0,
-          this._numVal('hotend'),
-          this._numVal('bed'),
-          ch?.current ?? null,
+          this._numVal('hotend_target'),
+          this._numVal('bed_target'),
+          ch?.target ?? null,
           true,
           this._nozzleX
         );
@@ -903,7 +903,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Printer SVG -->
       <div class="printer-section">
         <div class="printer-svg-wrap">
-          ${renderPrinterSVG(cfg.printer_type, progress, hotendTemp, bedTemp, chamberTemp, isPrinting, this._nozzleX)}
+          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
         </div>
       </div>
 
