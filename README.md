@@ -44,6 +44,10 @@ Key features at a glance:
 |:---:|:---:|
 | ![i3 style](screenshots/card-i3.png) | ![Cantilever style](screenshots/card-cantilever.png) |
 
+| Printer types: CoreXY (printing) |
+|:---:|
+| ![CoreXY style](screenshots/card-corexy.png) |
+
 ---
 
 ## Installation
