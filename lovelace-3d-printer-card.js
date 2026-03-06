@@ -205,17 +205,17 @@ function svgPrinterI3(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX)
   const accentColor = 'var(--mode-color)';
   const rodLeft = 30, rodRight = 170;
   const rodTop = 18, rodBottom = 155;
-  const gantryY = rodTop + 20 + (1 - progress) * (rodBottom - rodTop - 55);
-  const nozzleXPos = 55 + nozzleX * 90;
-  const nozzleYPos = gantryY + 10;
   const bedY = 140;
   const bedW = 100, bedH = 10;
   const bedX = (W - bedW) / 2;
-  const objMaxH = bedY - gantryY - 16;
+  const objMaxH = bedY - rodTop - 36;
   const objH = Math.max(4, objMaxH * progress);
+  const objY = bedY - objH;
+  const gantryY = objY - 16;
+  const nozzleXPos = 55 + (nozzleX ?? 0.5) * 90;
+  const nozzleYPos = gantryY + 10;
   const objW = 56;
   const objX = W / 2 - objW / 2;
-  const objY = bedY - objH;
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
@@ -261,13 +261,14 @@ function svgPrinterCoreXY(progress, hotendOn, bedOn, chamberOn, isPrinting, nozz
   const bedW = 100;
   const bedX = (W - bedW) / 2;
   const bedH = 10;
-  const railY = frameTop + 25;
-  const nozzleXPos = 55 + nozzleX * 90;
+  const objMaxH = bedY - frameTop - 45;
+  const objH = Math.max(4, objMaxH * progress);
+  const objY = bedY - objH;
+  const railY = objY - 12;
+  const nozzleXPos = 55 + (nozzleX ?? 0.5) * 90;
   const nozzleYPos = railY + 12;
-  const objH = Math.max(4, (bedY - railY - 20) * progress);
   const objW = 56;
   const objX = W / 2 - objW / 2;
-  const objY = bedY - objH;
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
@@ -315,17 +316,18 @@ function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, 
   const baseY = 155;
   const baseLeft = 20;
   const baseRight = 175;
-  const armY = uprightTop + 20 + (1 - progress) * (uprightBottom - uprightTop - 60);
-  const armRight = baseRight - 5;
-  const nozzleXPos = 70 + nozzleX * 80;
   const bedY = 140;
   const bedW = 110;
   const bedX = (W - bedW) / 2;
   const bedH = 10;
-  const objH = Math.max(4, (bedY - armY - 16) * progress);
+  const objMaxH = bedY - uprightTop - 36;
+  const objH = Math.max(4, objMaxH * progress);
+  const objY = bedY - objH;
+  const armY = objY - 16;
+  const armRight = baseRight - 5;
+  const nozzleXPos = 70 + (nozzleX ?? 0.5) * 80;
   const objW = 60;
   const objX = W / 2 - objW / 2;
-  const objY = bedY - objH;
   const hotendGlow = hotendOn
     ? `<circle cx="${nozzleXPos}" cy="${armY + 16}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
     : '';
@@ -360,14 +362,15 @@ function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, 
 </svg>`;
 }
 
-function renderPrinterSVG(printerType, progress, hotendTarget, bedTarget, chamberTarget, isPrinting, nozzleX) {
-  // Use Number() to handle string "0"/"0.0" etc. - ensures 0 is treated as off
+const BUILD_VOLUME = 300; // mm, default for normalizing position_x/y
+
+function renderPrinterSVG(printerType, progress, hotendTarget, bedTarget, chamberTarget, isPrinting, nozzleX, posX, posY) {
   const isTargetSet = (t) => t != null && !isNaN(Number(t)) && Number(t) > 0;
   const hotendOn = isTargetSet(hotendTarget);
   const bedOn = isTargetSet(bedTarget);
   const chamberOn = isTargetSet(chamberTarget);
   const p = Math.min(1, Math.max(0, progress / 100));
-  const nx = Math.min(1, Math.max(0, nozzleX));
+  const nx = (posX != null && !isNaN(posX)) ? Math.min(1, Math.max(0, posX / BUILD_VOLUME)) : Math.min(1, Math.max(0, nozzleX));
   switch ((printerType || 'i3').toLowerCase()) {
     case 'corexy': return svgPrinterCoreXY(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
     case 'cantilever': return svgPrinterCantilever(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
@@ -466,12 +469,14 @@ class PrinterCard3D extends HTMLElement {
       [['current_layer'],                                              'current_layer'],
       [['total_layer', 'total_layers'],                                'total_layers'],
       [['filament_used'],                                              'filament_used'],
-      [['current_print_message', 'printer_message', 'current_display_message'], 'message'],
+      [['current_print_message'],   'current_print_message'],
+      [['current_display_message'], 'current_display_message'],
       [['extruder_temperature', 'extruder_temp'],                      'hotend'],
       [['bed_temperature', 'bed_temp'],                                'bed'],
       [['toolhead_position_x'],                                        'position_x'],
       [['toolhead_position_y'],                                        'position_y'],
       [['toolhead_position_z'],                                        'position_z'],
+      [['object_height'],                                              'object_height'],
     ];
 
     // Well-known number suffixes → role key
@@ -738,7 +743,9 @@ class PrinterCard3D extends HTMLElement {
           this._numVal('bed_target'),
           this._numVal('chamber_target') ?? this._heaters.find(h => h.entity_id?.toLowerCase().includes('chamber'))?.target ?? null,
           true,
-          this._nozzleX
+          this._nozzleX,
+          this._numVal('position_x'),
+          this._numVal('position_y')
         );
       }
       this._animFrame = requestAnimationFrame(tick);
@@ -776,10 +783,8 @@ class PrinterCard3D extends HTMLElement {
     const val = parseFloat(el.value);
     if (el.dataset.action === 'set-fan') {
       this._hass.callService('number', 'set_value', { entity_id: el.dataset.entity, value: val });
-    } else if (el.dataset.action === 'speed-factor' || el.dataset.action === 'mv-speed-factor') {
+    } else if (el.dataset.action === 'mv-speed-factor') {
       this._setNumber('speed_factor', val);
-    } else if (el.dataset.action === 'flow-factor') {
-      this._setNumber('flow_factor', val);
     }
   }
 
@@ -861,6 +866,7 @@ class PrinterCard3D extends HTMLElement {
     const isPrinting = this._isPrinting();
     const isPaused = this._isPaused();
     const isActive = isPrinting || isPaused;
+    const movementDisabled = isPrinting && !isPaused; // disable home/jog when printing (allow when paused)
 
     // Thumbnail: only show after confirming the URL returns a valid image (onload); fall back to icon on error
     const thumbEntityId = this._entities.thumbnail;
@@ -889,7 +895,6 @@ class PrinterCard3D extends HTMLElement {
     const cameras = this._cameras;
     const camCount = cameras.length;
 
-    const hasSpeedTuning = this._entityExists('speed_factor') || this._entityExists('flow_factor');
     const hasMacros = this._macros.length > 0;
     const hasMovement = this._entityExists('home_all') || this._entityExists('home_x') || this._entityExists('position_x');
     const hasMisc = this._heaters.length > 0 || this._fans.length > 0 || this._entityExists('hotend') || this._entityExists('bed');
@@ -916,13 +921,16 @@ class PrinterCard3D extends HTMLElement {
     const hasCancel   = this._entityExists('cancel');
     const hasEmergency = this._entityExists('emergency');
 
-    // Message banner
-    const rawMsg = this._stVal('message');
+    // Message banner — combine current_print_message and current_display_message; hide if both empty
+    const printMsg = this._stVal('current_print_message');
+    const displayMsg = this._stVal('current_display_message');
+    const validMsg = (v) => v && v.toLowerCase() !== 'none' && isNaN(parseFloat(v));
+    const parts = [printMsg, displayMsg].filter(validMsg);
+    const msgText = parts.length > 0 ? parts.join(' · ') : null;
     const isErrorState = status.toLowerCase().includes('error') || status.toLowerCase().includes('cancel');
-    const msgText = (rawMsg && rawMsg.toLowerCase() !== 'none' && isNaN(parseFloat(rawMsg))) ? rawMsg : null;
     const msgColor = stateColor(status);
 
-    // Position values for movement sheet
+    // Position values for movement sheet and SVG
     const posX = this._numVal('position_x');
     const posY = this._numVal('position_y');
     const posZ = this._numVal('position_z');
@@ -950,7 +958,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Printer SVG -->
       <div class="printer-section">
         <div class="printer-svg-wrap">
-          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, this._numVal('chamber_target') ?? chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
+          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, this._numVal('chamber_target') ?? chamberHeater?.target ?? null, isPrinting, this._nozzleX, posX, posY)}
         </div>
       </div>
 
@@ -1045,7 +1053,6 @@ class PrinterCard3D extends HTMLElement {
 
       <!-- Other controls -->
       <div class="controls">
-        ${hasSpeedTuning ? `<button class="ctrl-btn ctrl-tune" data-action="open-speed">${ICON_TUNE} Tune</button>` : ''}
         ${hasMacros ? `<button class="ctrl-btn ctrl-tune" data-action="open-macros">${ICON_MACRO} Macros</button>` : ''}
         ${hasMovement ? `<button class="ctrl-btn ctrl-tune" data-action="open-movement">${ICON_MOVE} Move</button>` : ''}
         ${hasMisc ? `<button class="ctrl-btn ctrl-tune" data-action="open-misc">${ICON_THERMOMETER} Misc</button>` : ''}
@@ -1073,37 +1080,13 @@ class PrinterCard3D extends HTMLElement {
       <!-- Overlay -->
       <div class="overlay" data-action="close-sheet"></div>
 
-      <!-- Speed/Flow tuning sheet -->
-      ${hasSpeedTuning ? `<div class="sheet" data-sheet="speed">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_TUNE} Print Tuning</div>
-        <div class="sheet-scroll">
-        <div class="tune-rows">
-          ${this._entityExists('speed_factor') ? `<div class="tune-row">
-            <div class="tune-row-header">
-              <span class="tune-row-label">${ICON_SPEED} Speed Factor</span>
-              <span class="tune-row-val mono" id="speed-val">${fmtPct(speedFactor)}</span>
-            </div>
-            <input type="range" class="tune-slider" data-action="speed-factor" min="10" max="200" step="1" value="${Math.round(speedFactor || 100)}"/>
-          </div>` : ''}
-          ${this._entityExists('flow_factor') ? `<div class="tune-row">
-            <div class="tune-row-header">
-              <span class="tune-row-label">${ICON_FLOW} Flow Factor</span>
-              <span class="tune-row-val mono" id="flow-val">${fmtPct(flowFactor)}</span>
-            </div>
-            <input type="range" class="tune-slider" data-action="flow-factor" min="10" max="200" step="1" value="${Math.round(flowFactor || 100)}"/>
-          </div>` : ''}
-        </div>
-        </div>
-      </div>` : ''}
-
       <!-- Macros sheet -->
       ${hasMacros ? `<div class="sheet" data-sheet="macros">
         <div class="sheet-handle"></div>
         <div class="sheet-title">${ICON_MACRO} Macros</div>
         <div class="sheet-scroll">
-        <div class="macro-list">
-          ${this._macros.map(m => `<button class="macro-btn" data-action="run-macro" data-entity="${m.entity_id}">
+        <div class="macro-list ${movementDisabled ? 'disabled' : ''}">
+          ${this._macros.map(m => `<button class="macro-btn" data-action="run-macro" data-entity="${m.entity_id}" ${movementDisabled ? 'disabled' : ''}>
             ${ICON_PLAY} ${m.label}
           </button>`).join('')}
         </div>
@@ -1116,41 +1099,41 @@ class PrinterCard3D extends HTMLElement {
         <div class="sheet-title">${ICON_MOVE} Movement</div>
         <div class="sheet-scroll">
 
-        ${(posX != null || posY != null || posZ != null) ? `<div class="pos-bar">
+        ${(posX != null || posY != null || posZ != null) ? `<div class="pos-bar ${movementDisabled ? 'disabled' : ''}">
           ${posX != null ? `<div class="pos-item"><span class="pos-axis pos-x">X</span><span class="pos-val mono">${posX.toFixed(1)}</span></div>` : ''}
           ${posY != null ? `<div class="pos-item"><span class="pos-axis pos-y">Y</span><span class="pos-val mono">${posY.toFixed(1)}</span></div>` : ''}
           ${posZ != null ? `<div class="pos-item"><span class="pos-axis pos-z">Z</span><span class="pos-val mono">${posZ.toFixed(1)}</span></div>` : ''}
         </div>` : ''}
 
-        <div class="home-row">
-          ${this._entityExists('home_all') ? `<button class="home-btn" data-action="home-axis" data-axis="all">${ICON_HOME} All</button>` : ''}
-          ${this._entityExists('home_x') ? `<button class="home-btn home-x" data-action="home-axis" data-axis="x">X</button>` : ''}
-          ${this._entityExists('home_y') ? `<button class="home-btn home-y" data-action="home-axis" data-axis="y">Y</button>` : ''}
-          ${this._entityExists('home_z') ? `<button class="home-btn home-z" data-action="home-axis" data-axis="z">Z</button>` : ''}
+        <div class="home-row ${movementDisabled ? 'disabled' : ''}">
+          ${this._entityExists('home_all') ? `<button class="home-btn" data-action="home-axis" data-axis="all" ${movementDisabled ? 'disabled' : ''}>${ICON_HOME} All</button>` : ''}
+          ${this._entityExists('home_x') ? `<button class="home-btn home-x" data-action="home-axis" data-axis="x" ${movementDisabled ? 'disabled' : ''}>X</button>` : ''}
+          ${this._entityExists('home_y') ? `<button class="home-btn home-y" data-action="home-axis" data-axis="y" ${movementDisabled ? 'disabled' : ''}>Y</button>` : ''}
+          ${this._entityExists('home_z') ? `<button class="home-btn home-z" data-action="home-axis" data-axis="z" ${movementDisabled ? 'disabled' : ''}>Z</button>` : ''}
         </div>
 
-        <div class="jog-section">
+        <div class="jog-section ${movementDisabled ? 'disabled' : ''}">
           <!-- XY jog cross -->
           <div class="jog-xy">
             <div class="jog-xy-top">
-              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="${d}">+${d}</button>`).join('')}
+              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
             </div>
             <div class="jog-xy-mid">
-              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="-${d}">-${d}</button>`).join('')}
+              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
               <div class="jog-center">${ICON_MOVE}</div>
-              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="${d}">+${d}</button>`).join('')}
+              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
             </div>
             <div class="jog-xy-bot">
-              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="-${d}">-${d}</button>`).join('')}
+              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
             </div>
           </div>
 
           <!-- Z jog column -->
           <div class="jog-z">
             <div class="jog-z-label pos-z">Z</div>
-            ${[10,1,0.1].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="${d}">+${d}</button>`).join('')}
+            ${[10,1,0.1].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
             <div class="jog-z-sep"></div>
-            ${[0.1,1,10].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="-${d}">-${d}</button>`).join('')}
+            ${[0.1,1,10].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
           </div>
         </div>
 
@@ -1286,7 +1269,6 @@ class PrinterCard3D extends HTMLElement {
 
     switch (action) {
       case 'toggle-cameras':  this._toggleCameras(); break;
-      case 'open-speed':      this._openSheetPanel('speed'); break;
       case 'toggle-power': {
         const pId = el.dataset.entity;
         if (pId) this._hass.callService('switch', 'toggle', { entity_id: pId });
@@ -1314,17 +1296,6 @@ class PrinterCard3D extends HTMLElement {
     const val = parseFloat(el.value);
 
     switch (el.dataset.action) {
-      case 'speed-factor': {
-        const d = this.shadowRoot.querySelector('#speed-val');
-        if (d) d.textContent = `${val}%`;
-        // Service call is deferred to pointerup to avoid re-render during drag
-        break;
-      }
-      case 'flow-factor': {
-        const d = this.shadowRoot.querySelector('#flow-val');
-        if (d) d.textContent = `${val}%`;
-        break;
-      }
       case 'mv-speed-factor': {
         const d = this.shadowRoot.querySelector('#mv-speed-val');
         if (d) d.textContent = `${val}%`;
@@ -1660,6 +1631,7 @@ class PrinterCard3D extends HTMLElement {
 .jog-btn:hover { background:var(--chip-bg); border-color:var(--mode-color); color:var(--mode-color); }
 .jog-btn:active { transform:scale(0.95); }
 .jog-z-btn { width:100%; }
+.jog-section.disabled, .home-row.disabled, .pos-bar.disabled, .macro-list.disabled { opacity:.5; pointer-events:none; }
 
 /* ── Temps & Fans sheet ── */
 .temps-body { display:flex; flex-direction:column; gap:0; }

@@ -13,7 +13,6 @@ Key features at a glance:
 - **Filename tile** with automatic thumbnail preview when printing/paused (shown only after confirming the feed returns a valid image; falls back to file icon otherwise)
 - **Print controls** — Pause / Resume / Cancel / Emergency Stop (double-tap required for E-Stop)
 - **Auto-discovery** — all entities crawled from `base_entity` prefix; no manual entity config required
-- **Tune sheet** — speed factor and flow factor sliders
 - **Macros sheet** — all `button.<base>_macro_*` buttons, auto-discovered
 - **Movement sheet** — XYZ position display, home buttons, jog grid, speed slider
 - **Misc sheet** — settable heaters with temperature inputs, fan/output sliders
@@ -33,9 +32,9 @@ Key features at a glance:
 |:---:|:---:|
 | ![Card temps](screenshots/card-temps.png) | ![Card cameras](screenshots/card-cameras.png) |
 
-| Print Tuning | Misc (temps & fans) |
-|:---:|:---:|
-| ![Tune sheet](screenshots/card-tune.png) | ![Misc sheet](screenshots/misc-temps-fans.png) |
+| Misc (temps & fans) |
+|:---:|
+| ![Misc sheet](screenshots/misc-temps-fans.png) |
 
 | Macros |
 |:---:|
@@ -140,7 +139,7 @@ Any entity with `attributes.hidden === true` is skipped entirely. This filters o
 | Current layer | `current_layer` |
 | Total layers | `total_layer` (with or without trailing `s`) |
 | Filament used | `filament_used` |
-| Message | `current_print_message`, `printer_message`, `current_display_message` |
+| Message | `current_print_message`, `current_display_message` (combined; banner hidden if both empty) |
 | Hotend temp | `extruder_temperature`, `extruder_temp` |
 | Bed temp | `bed_temperature`, `bed_temp` |
 | Position X/Y/Z | `toolhead_position_x/y/z` |
@@ -188,9 +187,6 @@ Display labels always come from the entity's `friendly_name` attribute, with the
 
 ## Sheets (bottom panels)
 
-### Print Tuning
-Opened via **Tune**. Speed factor and flow factor sliders. Hidden if neither entity is found.
-
 ### Macros
 Opened via **Macros**. All `button.<base>_macro_*` entities, sorted alphabetically. Hidden if none found.
 
@@ -198,7 +194,7 @@ Opened via **Macros**. All `button.<base>_macro_*` entities, sorted alphabetical
 Opened via **Move**. Shown when any home button or position sensor exists.
 - **Position bar** — live X/Y/Z readout
 - **Home buttons** — Home All / X / Y / Z (shown individually based on availability)
-- **Jog grid** — X/Y cross grid and Z column with ±0.1/1/10/100 mm increments
+- **Jog grid** — X/Y cross grid and Z column with ±0.1/1/10/100 mm increments (disabled while printing)
 - **Speed slider** — speed factor entity
 
 Jog moves are sent via `moonraker.send_gcode` or `klipper.send_gcode` (G91 relative move, then G90). Falls back to `script.<base>_jog` with `{ axis, distance }` variables.
