@@ -69,6 +69,24 @@ function fmtSeconds(secs) {
   return `${s}s`;
 }
 
+// Parse duration strings from Moonraker: "21m 10s", "2h 10m", "2h 30m 45s", "18s", "In 2 hours"
+function parseDurationToSeconds(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  const n = parseFloat(s);
+  if (!isNaN(n) && s === String(n)) return n; // plain number (seconds)
+  let total = 0;
+  const h = s.match(/(\d+)\s*h(?:ours?)?/i);
+  const m = s.match(/(\d+)\s*m(?:in(?:utes?)?)?(?!\s*s)/i) || s.match(/(\d+)\s*min/i);
+  const sec = s.match(/(\d+)\s*s(?:ec(?:onds?)?)?/i) || s.match(/(\d+)\s*sec/i);
+  if (h) total += parseInt(h[1], 10) * 3600;
+  if (m) total += parseInt(m[1], 10) * 60;
+  if (sec) total += parseInt(sec[1], 10);
+  if (total > 0) return total;
+  if (!isNaN(n) && n > 0) return n; // fallback: first number (e.g. "In 2 hours" -> 2)
+  return null;
+}
+
 function fmtTemp(val, unit = '°C') {
   if (val == null || val === 'unknown' || val === 'unavailable') return '—';
   const n = parseFloat(val);
@@ -109,6 +127,12 @@ function numVal(hass, entityId) {
   if (v === null) return null;
   const n = parseFloat(v);
   return isNaN(n) ? null : n;
+}
+
+function durationVal(hass, entityId) {
+  const v = stVal(hass, entityId);
+  if (v === null) return null;
+  return parseDurationToSeconds(v);
 }
 
 function attrVal(hass, entityId, attr) {
@@ -421,7 +445,7 @@ class PrinterCard3D extends HTMLElement {
       [['printer_state'],                                             'printer_state'],
       [['progress'],                                                   'progress'],
       [['print_duration'],                                             'duration'],
-      [['print_eta', 'print_time_left'],                               'eta'],
+      [['print_time_left', 'print_eta'],                                'eta'],
       [['filename'],                                                   'filename'],
       [['current_layer'],                                              'current_layer'],
       [['total_layer', 'total_layers'],                                'total_layers'],
@@ -504,7 +528,8 @@ class PrinterCard3D extends HTMLElement {
             const isExistingBad = !existingSt || existingSt.state === 'unknown' || existingSt.state === 'unavailable';
             // Prefer canonical temp sensors over short aliases (extruder_temperature > extruder_temp, bed_temperature > bed_temp)
             const preferNew = (role === 'hotend' && id.includes('extruder_temperature') && existing.includes('extruder_temp'))
-              || (role === 'bed' && id.includes('bed_temperature') && existing.includes('bed_temp'));
+              || (role === 'bed' && id.includes('bed_temperature') && existing.includes('bed_temp'))
+              || (role === 'eta' && id.includes('print_time_left') && existing.includes('print_eta'));
             if ((isExistingBad && isNewGood) || preferNew) this._entities[role] = id;
           }
         } else {
@@ -806,13 +831,17 @@ class PrinterCard3D extends HTMLElement {
     const bedTarget = this._numVal('bed_target');
     const chamberHeater = this._heaters.find(h => h.entity_id && h.entity_id.toLowerCase().includes('chamber'));
     const chamberTemp = chamberHeater?.current ?? null;
-    const durationSecs = this._numVal('duration');
+    const durationSecs = durationVal(this._hass, this._entities.duration) ?? this._numVal('duration');
     const currentLayer = this._numVal('current_layer');
     const totalLayers = this._numVal('total_layers');
     const filename = this._stVal('filename');
     const speedFactor = this._numVal('speed_factor');
     const flowFactor = this._numVal('flow_factor');
-    const filamentUsed = this._numVal('filament_used');
+    const filamentRaw = this._numVal('filament_used');
+    const filamentUnit = attrVal(this._hass, this._entities.filament_used, 'unit_of_measurement');
+    const filamentUsed = filamentRaw != null
+      ? (filamentUnit === 'm' || filamentRaw < 100 ? filamentRaw : filamentRaw / 1000)
+      : null;
     const isPrinting = this._isPrinting();
     const isPaused = this._isPaused();
     const isActive = isPrinting || isPaused;
@@ -834,8 +863,8 @@ class PrinterCard3D extends HTMLElement {
     const hasThumb = !!(thumbEntityId && (isPrinting || isPaused));
     const showThumb = hasThumb && this._thumbLoaded && !this._thumbFailed;
 
-    // ETA
-    let etaSecs = this._numVal('eta');
+    // ETA — prefer parsed print_time_left; fallback to calculated from duration/progress
+    let etaSecs = durationVal(this._hass, this._entities.eta) ?? this._numVal('eta');
     if (!etaSecs && durationSecs != null && progress > 0) {
       etaSecs = (durationSecs / (progress / 100)) - durationSecs;
     }
@@ -952,7 +981,7 @@ class PrinterCard3D extends HTMLElement {
           <div class="tile-info">
             <div class="tile-primary">${Math.round(progress)}%</div>
             ${layerStr ? `<div class="tile-secondary">${layerStr} layers</div>` : ''}
-            ${filamentUsed != null ? `<div class="tile-secondary">${(filamentUsed / 1000).toFixed(2)}m used</div>` : ''}
+            ${filamentUsed != null ? `<div class="tile-secondary">${filamentUsed.toFixed(2)}m used</div>` : ''}
           </div>
         </div>
 
@@ -963,7 +992,6 @@ class PrinterCard3D extends HTMLElement {
           <div class="tile-value">
             ${etaSecs != null ? `<span class="mono">${fmtSeconds(etaSecs)}</span>` : '<span class="na">—</span>'}
           </div>
-          ${etaSecs != null ? `<div class="tile-sub">${fmtETA(etaSecs) || ''}</div>` : ''}
         </div>
 
         <!-- Elapsed tile -->
