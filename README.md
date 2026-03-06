@@ -4,7 +4,7 @@
 
 Key features at a glance:
 
-- **Animated SVG printer visualization** — i3, CoreXY, and Cantilever styles; printed object builds up layer by layer
+- **Animated SVG printer visualization** — i3, CoreXY, CoreXY Flying Gantry, and Cantilever styles; printed object builds up layer by layer
 - **Heater glow effect** — hotend, bed, and chamber glow in the SVG when a target temperature is set
 - **Message banner** — displays Klipper error/status messages, tinted with the current state color
 - **Live stats bar** — hotend temp, bed temp, extra heaters, speed factor, flow factor
@@ -112,7 +112,7 @@ power_switch: switch.printer_smart_plug
 |---|---|---|---|
 | `base_entity` | string | **Yes** | Entity name prefix, e.g. `voron_24` |
 | `name` | string | No | Display name shown in the card header |
-| `printer_type` | string | No | `i3` (default), `corexy`, or `cantilever` |
+| `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, or `cantilever` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
 
@@ -215,7 +215,8 @@ Opened via **More**. Only shown when any system restart entities are discovered.
 | Value | Description |
 |---|---|
 | `i3` | Prusa i3 / Cartesian — two Z rods, X gantry, moving bed |
-| `corexy` | CoreXY — corner posts, top gantry, fixed bed |
+| `corexy` | CoreXY — gantry fixed at top, bed moves down with object |
+| `corexy-flying-gantry` | CoreXY Voron 2.4 — flying gantry moves up with object, fixed bed |
 | `cantilever` | Cantilever (Ender-style) — single upright, cantilevered X arm |
 
 ---
