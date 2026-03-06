@@ -776,6 +776,7 @@ class PrinterCard3D extends HTMLElement {
     const changed = new Set();
     for (const [role, id] of Object.entries(this._entities)) {
       if (!id) continue;
+      if (role === 'thumbnail') continue; // updates every frame during print; would cause flicker
       if (prev.states[id] !== next.states[id]) changed.add(role);
     }
     const ps = this._config?.power_switch;
