@@ -131,7 +131,23 @@ function numVal(hass, entityId) {
 
 function durationVal(hass, entityId) {
   const v = stVal(hass, entityId);
-  if (v === null) return null;
+  if (v == null) return null;
+  const deviceClass = attrVal(hass, entityId, 'device_class') || '';
+  const unit = (attrVal(hass, entityId, 'unit_of_measurement') || '').toLowerCase();
+  const s = String(v).trim();
+
+  // Timestamp (print_eta): ISO date → seconds from now until that time
+  if (deviceClass === 'timestamp' && /^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const t = new Date(s).getTime();
+    if (!isNaN(t)) return Math.max(0, (t - Date.now()) / 1000);
+  }
+
+  const n = parseFloat(v);
+  if (!isNaN(n) && s === String(n)) {
+    if (unit === 'min' || unit === 'minute' || unit === 'minutes') return n * 60;
+    if (unit === 'h' || unit === 'hour' || unit === 'hours') return n * 3600;
+    return n; // assume seconds
+  }
   return parseDurationToSeconds(v);
 }
 

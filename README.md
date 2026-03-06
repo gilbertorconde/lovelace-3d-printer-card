@@ -134,8 +134,8 @@ Any entity with `attributes.hidden === true` is skipped entirely. This filters o
 | Status | `current_print_state` (values: `standby`, `printing`, `paused`, `complete`, `cancelled`, `error`) |
 | Printer state | `printer_state` (values: `ready`, `startup`, `shutdown`, `error`) — combined with status for display; `error`/`shutdown`/`startup` take precedence |
 | Progress | `progress` |
-| Duration | `print_duration` |
-| ETA | `print_eta`, `print_time_left` |
+| Duration | `print_duration` (Moonraker: unit `min`) |
+| ETA | `print_time_left` (preferred, unit `h`), `print_eta` (fallback, ISO timestamp) |
 | Filename | `filename` |
 | Current layer | `current_layer` |
 | Total layers | `total_layer` (with or without trailing `s`) |
@@ -145,7 +145,9 @@ Any entity with `attributes.hidden === true` is skipped entirely. This filters o
 | Bed temp | `bed_temperature`, `bed_temp` |
 | Position X/Y/Z | `toolhead_position_x/y/z` |
 
-When multiple entities match the same role (e.g. an alias sensor), the one with a valid (non-unknown/unavailable) state wins.
+When multiple entities match the same role (e.g. an alias sensor), the one with a valid (non-unknown/unavailable) state wins. For ETA, `print_time_left` is preferred over `print_eta` (time remaining vs. finish timestamp).
+
+The card converts Moonraker units automatically: `print_duration` (min) and `print_time_left` (h) are converted to seconds for display.
 
 ### Well-known roles — number
 
