@@ -488,6 +488,8 @@ class PrinterCard3D extends HTMLElement {
     this._thumbFailed = false;
     this._thumbLoaded = false;
     this._lastThumbSrc = null;
+    this._lastHtml = {};
+    this._lastEntityIds = null;
     this._bound_click = this._onClick.bind(this);
     this._bound_change = this._onChange.bind(this);
     this._bound_pointerdown = this._onPointerDown.bind(this);
@@ -505,10 +507,8 @@ class PrinterCard3D extends HTMLElement {
     this._hass = hass;
     if (!this._config) return;
     this._crawlEntities();
-    const isPrinting = ['printing', 'paused'].includes(this._effectiveStatus());
-    // Always re-render when printing so SVG gantry/progress updates are visible
-    if (prev && !isPrinting && !this._entitiesChanged(prev, hass)) return;
-    this._render();
+    if (prev && !this._entitiesChanged(prev, hass)) return;
+    this._render(prev);
   }
 
   // ── Entity crawler ──────────────────────────────────────────────────────────
@@ -772,6 +772,36 @@ class PrinterCard3D extends HTMLElement {
     return false;
   }
 
+  _getChangedRoles(prev, next) {
+    const changed = new Set();
+    for (const [role, id] of Object.entries(this._entities)) {
+      if (!id) continue;
+      if (prev.states[id] !== next.states[id]) changed.add(role);
+    }
+    const ps = this._config?.power_switch;
+    if (ps && prev.states[ps] !== next.states[ps]) changed.add('power');
+    // Do not track camera entity state changes — they update every frame and would cause flicker
+    const b = this._config.base_entity;
+    for (const id of Object.keys(next.states)) {
+      if (id.includes(b) && prev.states[id] !== next.states[id]) changed.add('base');
+    }
+    return changed;
+  }
+
+  _getSectionsToUpdate(changedRoles) {
+    const sections = new Set();
+    const R = changedRoles;
+    if (R.has('status') || R.has('printer_state') || R.has('power')) sections.add('header');
+    if (R.has('current_print_message') || R.has('current_display_message')) sections.add('msg');
+    if (R.has('progress') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('status')) sections.add('printer');
+    if (R.has('hotend') || R.has('bed') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('speed_factor') || R.has('flow_factor') || R.has('base')) sections.add('stats');
+    if (R.has('progress') || R.has('duration') || R.has('eta') || R.has('current_layer') || R.has('total_layers') || R.has('filament_used') || R.has('filename') || R.has('thumbnail') || R.has('status')) sections.add('tiles');
+    if (R.has('status')) sections.add('controls');
+    if (R.has('camera')) sections.add('cameras');
+    if (R.has('base') || R.has('position_x') || R.has('position_y') || R.has('position_z')) sections.add('sheets');
+    return sections;
+  }
+
   _entityExists(key) {
     const id = this._entities[key];
     if (!id || !this._hass) return false;
@@ -861,14 +891,12 @@ class PrinterCard3D extends HTMLElement {
     }
   }
 
-  _render() {
+  _render(prevHass) {
     if (!this._config || !this._hass) return;
-    // Never blow away the DOM while the user is dragging a slider
     if (this._dragging) return;
     const card = this.shadowRoot.querySelector('.card');
     if (!card) return;
 
-    // Resolve all entities from hass (single pass crawler)
     this._crawlEntities();
 
     const status = this._effectiveStatus();
@@ -876,45 +904,72 @@ class PrinterCard3D extends HTMLElement {
     card.style.setProperty('--mode-color', mc);
     card.style.setProperty('--chip-bg', hexA(mc, 0.15));
 
-    card.innerHTML = this._html();
+    const entityIds = Object.values(this._entities).filter(Boolean).sort().join(',');
+    const structureChanged = this._lastEntityIds !== null && this._lastEntityIds !== entityIds;
+    let canIncremental = prevHass && !structureChanged && Object.keys(this._lastHtml).length > 0;
+
+    if (canIncremental) {
+      const changedRoles = this._getChangedRoles(prevHass, this._hass);
+      const sectionsToUpdate = this._getSectionsToUpdate(changedRoles);
+      if (!sectionsToUpdate.size) {
+        if (this._isPrinting()) this._startNozzleAnim();
+        else this._stopNozzleAnim();
+        return;
+      }
+      if (sectionsToUpdate.has('cameras')) canIncremental = false;
+    }
+
+    const parts = this._htmlParts();
+
+    if (canIncremental) {
+      const mainEl = card.querySelector('[data-section="main"]');
+      if (mainEl && parts.main !== this._lastHtml.main) {
+        mainEl.innerHTML = parts.main;
+        this._lastHtml.main = parts.main;
+      }
+    } else {
+      card.innerHTML = `<div data-section="main">${parts.main}</div><div data-section="cameras">${parts.cameras}</div>`;
+      this._lastHtml = { main: parts.main, cameras: parts.cameras };
+      this._lastEntityIds = entityIds;
+    }
 
     if (this._isPrinting()) this._startNozzleAnim();
     else this._stopNozzleAnim();
 
-    // Restore open sheet
     if (this._openSheet) {
       const sheet = this.shadowRoot.querySelector(`.sheet[data-sheet="${this._openSheet}"]`);
       const overlay = this.shadowRoot.querySelector('.overlay');
       if (sheet && overlay) { sheet.classList.add('open'); overlay.classList.add('visible'); }
     }
 
-    // Restore camera accordion
     if (this._camerasOpen) {
       const section = this.shadowRoot.querySelector('.cameras-section');
-      if (section) { section.classList.add('open'); this._wireCameraStreams(); }
+      if (section) {
+        section.classList.add('open');
+        this._wireCameraStreams();
+      }
     }
 
-    // Thumbnail img: only show after onload (valid image); onerror shows fallback
     const thumbImg = this.shadowRoot.querySelector('.thumb-img');
     if (thumbImg) {
       thumbImg.onload = () => {
         if (this._thumbLoaded) return;
         this._thumbLoaded = true;
         this._thumbFailed = false;
-        this._render();
+        this._render(this._hass);
       };
       thumbImg.onerror = () => {
         if (this._thumbFailed) return;
         this._thumbFailed = true;
         this._thumbLoaded = false;
-        this._render();
+        this._render(this._hass);
       };
     }
   }
 
   // ── HTML template ───────────────────────────────────────────────────────────
 
-  _html() {
+  _htmlParts() {
     const cfg = this._config;
     const status = this._effectiveStatus();
     const statusLabel = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
@@ -1008,7 +1063,7 @@ class PrinterCard3D extends HTMLElement {
     const posY = this._numVal('position_y');
     const posZ = this._numVal('position_z');
 
-    return `
+    const main = `
       <!-- Header -->
       <div class="header">
         <div class="printer-name">${name}</div>
@@ -1131,24 +1186,6 @@ class PrinterCard3D extends HTMLElement {
         ${hasMisc ? `<button class="ctrl-btn ctrl-tune" data-action="open-misc">${ICON_THERMOMETER} Misc</button>` : ''}
         ${hasSystem ? `<button class="ctrl-btn ctrl-system" data-action="open-system">${ICON_MORE} More</button>` : ''}
       </div>
-
-      <!-- Camera toggle button -->
-      ${camCount > 0 ? `<button class="camera-btn ${this._camerasOpen ? 'active' : ''}" data-action="toggle-cameras">
-        ${ICON_CAMERA}
-        <span>Cameras</span>
-        <span class="cam-badge">${camCount}</span>
-        <span class="cam-chevron ${this._camerasOpen ? 'open' : ''}">${ICON_CHEVRON}</span>
-      </button>
-      <div class="cameras-section">
-        <div class="camera-views">
-          ${cameras.map((cam, i) => `<div class="cam-view">
-            <div class="cam-label">${cam.label || `Camera ${i + 1}`}</div>
-            <div class="cam-stream-wrap" style="--cam-rotate:${cam.rotate}deg">
-              <ha-camera-stream class="cam-stream" data-cam-idx="${i}" allow-exoplayer muted></ha-camera-stream>
-            </div>
-          </div>`).join('')}
-        </div>
-      </div>` : ''}
 
       <!-- Overlay -->
       <div class="overlay" data-action="close-sheet"></div>
@@ -1331,6 +1368,25 @@ class PrinterCard3D extends HTMLElement {
         </div>
       </div>` : ''}
     `;
+
+    const camerasHtml = camCount > 0 ? `<button class="camera-btn ${this._camerasOpen ? 'active' : ''}" data-action="toggle-cameras">
+        ${ICON_CAMERA}
+        <span>Cameras</span>
+        <span class="cam-badge">${camCount}</span>
+        <span class="cam-chevron ${this._camerasOpen ? 'open' : ''}">${ICON_CHEVRON}</span>
+      </button>
+      <div class="cameras-section">
+        <div class="camera-views">
+          ${cameras.map((cam, i) => `<div class="cam-view">
+            <div class="cam-label">${cam.label || `Camera ${i + 1}`}</div>
+            <div class="cam-stream-wrap" style="--cam-rotate:${cam.rotate}deg">
+              <ha-camera-stream class="cam-stream" data-cam-idx="${i}" allow-exoplayer muted></ha-camera-stream>
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    return { main, cameras: camerasHtml };
   }
 
   // ── Event handlers ──────────────────────────────────────────────────────────
