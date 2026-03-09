@@ -487,7 +487,7 @@ class PrinterCard3D extends HTMLElement {
     this._dragging = false;
     this._thumbFailed = false;
     this._thumbLoaded = false;
-    this._lastThumbSrc = null;
+    this._lastThumbIdentity = null;
     this._lastHtml = {};
     this._lastEntityIds = null;
     this._bound_click = this._onClick.bind(this);
@@ -997,19 +997,22 @@ class PrinterCard3D extends HTMLElement {
     const isActive = isPrinting || isPaused;
     const movementDisabled = isPrinting && !isPaused; // disable home/jog when printing (allow when paused)
 
-    // Thumbnail: only show after confirming the URL returns a valid image (onload); fall back to icon on error
+    // Thumbnail: use entity_picture from attributes; fall back to icon on error
     const thumbEntityId = this._entities.thumbnail;
     const thumbState = thumbEntityId ? this._hass.states[thumbEntityId] : null;
-    const thumbToken = thumbState?.attributes?.access_token || '';
-    const thumbT = Math.floor(Date.now() / 5000) * 5000; // 5s cache buster so URL is stable for load check
-    const thumbSrc = thumbEntityId
-      ? `${location.origin}/api/camera_proxy/${thumbEntityId}?token=${thumbToken}&t=${thumbT}`
+    const entityPicture = thumbState?.attributes?.entity_picture || '';
+    const thumbSrc = entityPicture
+      ? (entityPicture.startsWith('http') ? entityPicture : `${location.origin}${entityPicture}`)
       : '';
-    if (!thumbEntityId || !(isPrinting || isPaused)) this._lastThumbSrc = null;
-    else if (thumbSrc && this._lastThumbSrc !== thumbSrc) {
-      this._lastThumbSrc = thumbSrc;
-      this._thumbLoaded = false;
-      this._thumbFailed = false;
+    if (!thumbEntityId || !(isPrinting || isPaused)) this._lastThumbIdentity = null;
+    else {
+      // Use entityId only — access_token rotates on entity updates and would cause fallback resets
+      const thumbIdentity = thumbEntityId;
+      if (this._lastThumbIdentity !== thumbIdentity) {
+        this._lastThumbIdentity = thumbIdentity;
+        this._thumbLoaded = false;
+        this._thumbFailed = false;
+      }
     }
     const hasThumb = !!(thumbEntityId && (isPrinting || isPaused));
     const showThumb = hasThumb && this._thumbLoaded && !this._thumbFailed;
