@@ -2,18 +2,18 @@
 // When Home Assistant is set to German, the BambuLab integration uses translated entity names.
 export default {
   sensor: [
-    ["status", ["druckstatus", "current_print_state"]],
-    ["printer_state", ["printer_state"]],
+    ["status", ["druckstatus", "aktuelle_arbeitsschritt", "current_print_state"]],
+    ["printer_state", ["druckstatus", "printer_state"]],
     ["progress", ["druckfortschritt", "progress"]],
     ["duration", ["druckdauer", "print_duration"]],
     ["eta", ["verbleibende_zeit", "print_time_left", "print_eta"]],
-    ["filename", ["gcode_dateiname", "filename"]],
+    ["filename", ["gcode_dateiname", "name_der_aufgabe", "filename"]],
     ["current_layer", ["aktuelle_schicht", "current_layer"]],
     ["total_layers", ["gesamtzahl_der_schichten", "total_layer", "total_layers"]],
-    ["filament_used", ["drucklaenge", "filament_used"]],
+    ["filament_used", ["drucklaenge", "aktiver_slot", "filament_used"]],
     ["current_print_message", ["current_print_message"]],
     ["current_display_message", ["current_display_message"]],
-    ["hotend", ["temperatur_der_duese", "temperatur_der_duese_0", "extruder_temperature", "extruder_temp"]],
+    ["hotend", ["temperatur_der_duese", "temperatur_der_duese_0", "temperatur_der_duse", "extruder_temperature", "extruder_temp"]],
     ["bed", ["druckbetttemperatur", "bed_temperature", "bed_temp"]],
     ["position_x", ["toolhead_position_x"]],
     ["position_y", ["toolhead_position_y"]],
@@ -21,8 +21,8 @@ export default {
     ["object_height", ["object_height"]]
   ],
   number: [
-    ["hotend_target", ["zieltemperatur_der_duese", "zieltemperatur_der_duese_0", "extruder_target"]],
-    ["bed_target", ["zieltemperatur_des_druckbett", "bed_target"]],
+    ["hotend_target", ["zieltemperatur_der_duese", "zieltemperatur_der_duese_0", "zieltemperatur_der_duse", "extruder_target"]],
+    ["bed_target", ["zieltemperatur_des_druckbett", "zieltemperatur_vom_druckbett", "bed_target"]],
     ["chamber_target", ["heater_chamber_target"]],
     ["speed_factor", ["geschwindigkeitsprofil", "speed_factor"]],
     ["flow_factor", ["flow_factor"]]
