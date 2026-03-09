@@ -64,15 +64,13 @@ Key features at a glance:
 
 ### Option B — Manual
 
-1. Download `lovelace-3d-printer-card.js` from the [latest release](https://github.com/gilbertorconde/lovelace-3d-printer-card/releases/latest).
-2. Copy it to `/config/www/lovelace-3d-printer-card/lovelace-3d-printer-card.js`.
-3. Add the following under **Settings → Dashboards → Resources**:
-
-```yaml
-resources:
-  - url: /local/lovelace-3d-printer-card/lovelace-3d-printer-card.js
-    type: module
-```
+1. Download `lovelace-3d-printer-card.js` and the `entities/` folder from the [latest release](https://github.com/gilbertorconde/lovelace-3d-printer-card/releases/latest).
+2. Copy the card to `/config/www/lovelace-3d-printer-card/lovelace-3d-printer-card.js` and the `entities/` folder to `/config/www/lovelace-3d-printer-card/entities/`.
+3. In **Settings → Dashboards → Resources**, add each file as a resource (type: **JavaScript Module**). Click **Add resource**, enter the URL, then add the next:
+   - `/local/lovelace-3d-printer-card/lovelace-3d-printer-card.js` (the card)
+   - `/local/lovelace-3d-printer-card/entities/en_generic.js`
+   - `/local/lovelace-3d-printer-card/entities/de_generic.js`
+   Add each entity mapping file you use; see the `entities/` folder for available options.
 
 ### Add the card to your dashboard
 
@@ -99,6 +97,17 @@ cameras:
     rotate: 90
 ```
 
+**With entity mappings (e.g. German UI):**
+
+```yaml
+type: custom:lovelace-3d-printer-card
+name: Voron 2.4
+base_entity: voron_24
+entity_mappings: de_generic
+```
+
+**Check the `entities/` folder** in the repo to see which mapping files are available (e.g. `en_generic.js`, `de_generic.js`). Use the filename without `.js` as the value.
+
 **With a smart plug power button:**
 
 ```yaml
@@ -117,6 +126,7 @@ power_switch: switch.printer_smart_plug
 | `base_entity` | string | **Yes** | Entity name prefix, e.g. `voron_24` |
 | `name` | string | No | Display name shown in the card header |
 | `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, or `cantilever` |
+| `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`). Default: `{hass.locale}_generic` or `en_generic` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
 
@@ -245,6 +255,32 @@ cameras:
 | `90` | Rotate 90° clockwise |
 | `180` | Flip upside down |
 | `270` | Rotate 90° counter-clockwise |
+
+---
+
+## Contributing — Entity Mappings
+
+The card relies on entity mapping files to discover printer entities and translate UI strings. If your printer or language is not supported, the card may show no data. **We welcome contributions.**
+
+### Available options
+
+**Always check the `entities/` folder** in the repo to see which mapping files are available. Currently included:
+
+- `en_generic.js` — Moonraker/Klipper, English (default)
+- `de_generic.js` — Moonraker/Klipper, German (includes `verbleibende_zeit` for ETA)
+
+### How to contribute
+
+1. Add a new JS module in `entities/` following the naming `{language}_{printer}.js`. Examples of files you could add:
+   - `en_bambu_p2p.js` — Bambu P2P/P2S, English
+   - `de_bambu_p2p.js` — Bambu P2P/P2S, German
+   - `de_voron_24.js` — Voron 2.4, German
+
+2. Copy `en_generic.js` as a starting point (use `export default { ... }`), then add or adjust the suffixes for your integration's entity IDs (e.g. BambuLab uses `verbleibende_zeit` for ETA in German).
+
+3. Add UI translations in the `"ui"` object for buttons, labels, and section headers (e.g. "Pause", "Macros", "Temperatures"). Entity-derived labels use HA `friendly_name` and need no translation.
+
+4. Submit a PR with the new file and a short note in the PR description.
 
 ---
 

@@ -22,6 +22,87 @@
 
 const CARD_TAG = 'lovelace-3d-printer-card';
 
+// ── Default entity mappings (fallback when fetch fails) ────────────────────────
+const DEFAULT_MAPPINGS = {
+  sensor: [
+    ['status', ['current_print_state']],
+    ['printer_state', ['printer_state']],
+    ['progress', ['progress']],
+    ['duration', ['print_duration']],
+    ['eta', ['print_time_left', 'print_eta']],
+    ['filename', ['filename']],
+    ['current_layer', ['current_layer']],
+    ['total_layers', ['total_layer', 'total_layers']],
+    ['filament_used', ['filament_used']],
+    ['current_print_message', ['current_print_message']],
+    ['current_display_message', ['current_display_message']],
+    ['hotend', ['extruder_temperature', 'extruder_temp']],
+    ['bed', ['bed_temperature', 'bed_temp']],
+    ['position_x', ['toolhead_position_x']],
+    ['position_y', ['toolhead_position_y']],
+    ['position_z', ['toolhead_position_z']],
+    ['object_height', ['object_height']],
+  ],
+  number: [
+    ['hotend_target', ['extruder_target']],
+    ['bed_target', ['bed_target']],
+    ['chamber_target', ['heater_chamber_target']],
+    ['speed_factor', ['speed_factor']],
+    ['flow_factor', ['flow_factor']],
+  ],
+  button: [
+    ['cancel', ['cancel_print']],
+    ['pause', ['pause_print']],
+    ['resume', ['resume_print']],
+    ['emergency', ['emergency_stop']],
+    ['home_all', ['home_all_axes']],
+    ['home_x', ['home_x_axis']],
+    ['home_y', ['home_y_axis']],
+    ['home_z', ['home_z_axis']],
+    ['fw_restart', ['firmware_restart']],
+    ['host_restart', ['host_restart']],
+    ['server_restart', ['server_restart']],
+    ['host_shutdown', ['host_shutdown']],
+    ['klipper_restart', ['restart_klipper']],
+  ],
+  camera: [['thumbnail', ['thumbnail']]],
+};
+
+const DEFAULT_UI = {
+  eta: 'ETA',
+  elapsed: 'Elapsed',
+  file: 'File',
+  progress: 'Progress',
+  hotend: 'Hotend',
+  bed: 'Bed',
+  speed: 'Speed',
+  flow: 'Flow',
+  pause: 'Pause',
+  resume: 'Resume',
+  cancel: 'Cancel',
+  macros: 'Macros',
+  move: 'Move',
+  misc: 'Misc',
+  more: 'More',
+  movement: 'Movement',
+  system: 'System',
+  temperatures: 'Temperatures',
+  fans_outputs: 'Fans & Outputs',
+  klipper_control: 'Klipper Control',
+  service_control: 'Service Control',
+  host_control: 'Host Control',
+  restart_klipper: 'Restart Klipper',
+  firmware_restart: 'Firmware Restart',
+  server_restart: 'Server Restart',
+  host_restart: 'Host Restart',
+  host_shutdown: 'Host Shutdown',
+  reboot_host: 'Reboot Host',
+  shutdown_host: 'Shutdown Host',
+  cameras: 'Cameras',
+  camera_fallback: 'Camera',
+  home_all: 'All',
+};
+
 // ── State colours ─────────────────────────────────────────────────────────────
 const STATE_COLORS = {
   printing:     '#4caf50',
@@ -184,6 +265,7 @@ function arcPath(cx, cy, r, startDeg, sweepDeg) {
 function _buildObject(progress, maxHeight, objectWidth) {
   const TOTAL_LINES = 12;
   const lineH = maxHeight / TOTAL_LINES;
+  const rectH = Math.max(0.5, lineH - 1); // clamp to avoid negative height when objH is small
   const filled = Math.round(progress * TOTAL_LINES);
   let lines = '';
   for (let i = 0; i < TOTAL_LINES; i++) {
@@ -191,9 +273,9 @@ function _buildObject(progress, maxHeight, objectWidth) {
     const y = 0 + i * lineH;
     const isDone = lineIdx < filled;
     if (isDone) {
-      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="currentColor" opacity="0.85"/>`;
+      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${rectH}" rx="1" fill="currentColor" opacity="0.85"/>`;
     } else {
-      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${lineH - 1}" rx="1" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.3" stroke-dasharray="3 2"/>`;
+      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${rectH}" rx="1" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.3" stroke-dasharray="3 2"/>`;
     }
   }
   return `<g class="print-object">${lines}</g>`;
@@ -490,6 +572,9 @@ class PrinterCard3D extends HTMLElement {
     this._lastThumbIdentity = null;
     this._lastHtml = {};
     this._lastEntityIds = null;
+    this._entityMappings = null;
+    this._entityMappingsKey = null;
+    this._entityMappingsPromise = null;
     this._bound_click = this._onClick.bind(this);
     this._bound_change = this._onChange.bind(this);
     this._bound_pointerdown = this._onPointerDown.bind(this);
@@ -506,9 +591,52 @@ class PrinterCard3D extends HTMLElement {
     const prev = this._hass;
     this._hass = hass;
     if (!this._config) return;
-    this._crawlEntities();
-    if (prev && !this._entitiesChanged(prev, hass)) return;
-    this._render(prev);
+    const key = this._resolveEntityMappingsKey();
+    const haveMappings = this._entityMappings && this._entityMappingsKey === key;
+    if (haveMappings) {
+      this._crawlEntities();
+      if (prev && !this._entitiesChanged(prev, hass)) return;
+      this._render(prev);
+      return;
+    }
+    if (!this._entityMappingsPromise || this._entityMappingsKey !== key) {
+      this._entityMappingsKey = key;
+      this._entityMappingsPromise = this._loadEntityMappings(key);
+    }
+    this._entityMappingsPromise.then((mappings) => {
+      this._entityMappings = mappings;
+      this._crawlEntities();
+      this._render(prev);
+    });
+  }
+
+  _resolveEntityMappingsKey() {
+    return this._config?.entity_mappings ||
+      (this._hass?.locale?.language || this._hass?.language || 'en') + '_generic';
+  }
+
+  _loadEntityMappings(key) {
+    const base = new URL('./entities/', import.meta.url).href;
+    const url = base + key + '.js';
+    return import(/* webpackIgnore: true */ url)
+      .then((m) => m.default)
+      .catch(() => this._loadEntityMappingsFallback(key));
+  }
+
+  _loadEntityMappingsFallback(key) {
+    const lang = key.split('_')[0];
+    const enUrl = new URL('./entities/en_generic.js', import.meta.url).href;
+    if (lang === 'en') {
+      return import(/* webpackIgnore: true */ enUrl).then((m) => m.default).catch(() => DEFAULT_MAPPINGS);
+    }
+    const langUrl = new URL(`./entities/${lang}_generic.js`, import.meta.url).href;
+    return import(/* webpackIgnore: true */ langUrl)
+      .then((m) => m.default)
+      .catch(() => import(/* webpackIgnore: true */ enUrl).then((m) => m.default).catch(() => DEFAULT_MAPPINGS));
+  }
+
+  _t(key) {
+    return this._entityMappings?.ui?.[key] ?? DEFAULT_UI[key] ?? key;
   }
 
   // ── Entity crawler ──────────────────────────────────────────────────────────
@@ -533,52 +661,12 @@ class PrinterCard3D extends HTMLElement {
       return id.replace(/^[^.]+\./, '').replace(new RegExp(`^${b}_`), '').replace(/_/g, ' ').trim();
     };
 
-    // Well-known sensor suffixes → role key
-    const SENSOR_ROLES = [
-      [['current_print_state'],                                       'status'],
-      [['printer_state'],                                             'printer_state'],
-      [['progress'],                                                   'progress'],
-      [['print_duration'],                                             'duration'],
-      [['print_time_left', 'print_eta'],                                'eta'],
-      [['filename'],                                                   'filename'],
-      [['current_layer'],                                              'current_layer'],
-      [['total_layer', 'total_layers'],                                'total_layers'],
-      [['filament_used'],                                              'filament_used'],
-      [['current_print_message'],   'current_print_message'],
-      [['current_display_message'], 'current_display_message'],
-      [['extruder_temperature', 'extruder_temp'],                      'hotend'],
-      [['bed_temperature', 'bed_temp'],                                'bed'],
-      [['toolhead_position_x'],                                        'position_x'],
-      [['toolhead_position_y'],                                        'position_y'],
-      [['toolhead_position_z'],                                        'position_z'],
-      [['object_height'],                                              'object_height'],
-    ];
-
-    // Well-known number suffixes → role key
-    const NUMBER_ROLES = [
-      [['extruder_target'],       'hotend_target'],
-      [['bed_target'],            'bed_target'],
-      [['heater_chamber_target'], 'chamber_target'],
-      [['speed_factor'],          'speed_factor'],
-      [['flow_factor'],           'flow_factor'],
-    ];
-
-    // Well-known button suffixes → role key
-    const BUTTON_ROLES = [
-      [['cancel_print'],   'cancel'],
-      [['pause_print'],    'pause'],
-      [['resume_print'],   'resume'],
-      [['emergency_stop'], 'emergency'],
-      [['home_all_axes'],  'home_all'],
-      [['home_x_axis'],    'home_x'],
-      [['home_y_axis'],    'home_y'],
-      [['home_z_axis'],    'home_z'],
-      [['firmware_restart'], 'fw_restart'],
-      [['host_restart'],     'host_restart'],
-      [['server_restart'],   'server_restart'],
-      [['host_shutdown'],    'host_shutdown'],
-      [['restart_klipper'],  'klipper_restart'],
-    ];
+    const m = this._entityMappings || DEFAULT_MAPPINGS;
+    const buildRoleTable = (arr) => (arr || []).map(([role, patterns]) => [patterns, role]);
+    const SENSOR_ROLES = buildRoleTable(m.sensor);
+    const NUMBER_ROLES = buildRoleTable(m.number);
+    const BUTTON_ROLES = buildRoleTable(m.button);
+    const CAMERA_ROLES = buildRoleTable(m.camera);
 
     const matchRole = (suffix, roleTable) => {
       for (const [patterns, role] of roleTable) {
@@ -658,9 +746,8 @@ class PrinterCard3D extends HTMLElement {
         }
 
       } else if (domain === 'camera') {
-        if (suffix === 'thumbnail' || id.endsWith('_thumbnail')) {
-          if (!this._entities.thumbnail) this._entities.thumbnail = id;
-        }
+        const role = matchRole(suffix, CAMERA_ROLES);
+        if (role === 'thumbnail' && !this._entities.thumbnail) this._entities.thumbnail = id;
         // Live cameras handled below
       }
     }
@@ -1099,12 +1186,12 @@ class PrinterCard3D extends HTMLElement {
         ${hotendStr ? `<div class="stat-item">
           <span class="stat-icon">${ICON_HOTEND}</span>
           <span class="stat-val hotend-val">${hotendStr}</span>
-          <span class="stat-label">Hotend</span>
+          <span class="stat-label">${this._t('hotend')}</span>
         </div>` : ''}
         ${bedStr ? `<div class="stat-item">
           <span class="stat-icon">${ICON_BED}</span>
           <span class="stat-val bed-val">${bedStr}</span>
-          <span class="stat-label">Bed</span>
+          <span class="stat-label">${this._t('bed')}</span>
         </div>` : ''}
         ${this._heaters.filter(h => !h.readonly && h.target_entity).map(h => {
           const cur = h.current != null ? Math.round(h.current) + '°' : '—';
@@ -1118,12 +1205,12 @@ class PrinterCard3D extends HTMLElement {
         ${speedFactor != null ? `<div class="stat-item">
           <span class="stat-icon">${ICON_SPEED}</span>
           <span class="stat-val">${fmtPct(speedFactor)}</span>
-          <span class="stat-label">Speed</span>
+          <span class="stat-label">${this._t('speed')}</span>
         </div>` : ''}
         ${flowFactor != null ? `<div class="stat-item">
           <span class="stat-icon">${ICON_FLOW}</span>
           <span class="stat-val">${fmtPct(flowFactor)}</span>
-          <span class="stat-label">Flow</span>
+          <span class="stat-label">${this._t('flow')}</span>
         </div>` : ''}
       </div>
 
@@ -1144,7 +1231,7 @@ class PrinterCard3D extends HTMLElement {
         <!-- ETA tile -->
         <div class="tile ${!isActive ? 'tile-dim' : ''}">
           <div class="tile-icon">${ICON_ETA}</div>
-          <div class="tile-label">ETA</div>
+          <div class="tile-label">${this._t('eta')}</div>
           <div class="tile-value">
             ${etaSecs != null ? `<span class="mono">${fmtSeconds(etaSecs)}</span>` : '<span class="na">—</span>'}
           </div>
@@ -1153,7 +1240,7 @@ class PrinterCard3D extends HTMLElement {
         <!-- Elapsed tile -->
         <div class="tile ${!isActive ? 'tile-dim' : ''}">
           <div class="tile-icon">${ICON_ELAPSED}</div>
-          <div class="tile-label">Elapsed</div>
+          <div class="tile-label">${this._t('elapsed')}</div>
           <div class="tile-value">
             ${durationSecs != null ? `<span class="mono">${fmtSeconds(durationSecs)}</span>` : '<span class="na">—</span>'}
           </div>
@@ -1166,7 +1253,7 @@ class PrinterCard3D extends HTMLElement {
             <div class="tile-icon thumb-fallback">${ICON_FILE}</div>
           </div>` : `<div class="tile-icon">${ICON_FILE}</div>`}
           <div class="tile-file-info">
-            <div class="tile-label">File</div>
+            <div class="tile-label">${this._t('file')}</div>
             <div class="tile-value tile-filename">
               ${filename ? `<span class="filename">${truncate(filename, 36)}</span>` : '<span class="na">—</span>'}
             </div>
@@ -1178,17 +1265,17 @@ class PrinterCard3D extends HTMLElement {
 
       <!-- Print controls (only when print is running) -->
       ${isActive && (hasPause || hasResume || hasCancel) ? `<div class="controls controls-print">
-        ${isPrinting && hasPause ? `<button class="ctrl-btn ctrl-pause" data-action="pause">${ICON_PAUSE} Pause</button>` : ''}
-        ${isPaused && hasResume ? `<button class="ctrl-btn ctrl-resume" data-action="resume">${ICON_PLAY} Resume</button>` : ''}
-        ${hasCancel ? `<button class="ctrl-btn ctrl-cancel" data-action="cancel">${ICON_STOP} Cancel</button>` : ''}
+        ${isPrinting && hasPause ? `<button class="ctrl-btn ctrl-pause" data-action="pause">${ICON_PAUSE} ${this._t('pause')}</button>` : ''}
+        ${isPaused && hasResume ? `<button class="ctrl-btn ctrl-resume" data-action="resume">${ICON_PLAY} ${this._t('resume')}</button>` : ''}
+        ${hasCancel ? `<button class="ctrl-btn ctrl-cancel" data-action="cancel">${ICON_STOP} ${this._t('cancel')}</button>` : ''}
       </div>` : ''}
 
       <!-- Other controls -->
       <div class="controls">
-        ${hasMacros ? `<button class="ctrl-btn ctrl-tune" data-action="open-macros">${ICON_MACRO} Macros</button>` : ''}
-        ${hasMovement ? `<button class="ctrl-btn ctrl-tune" data-action="open-movement">${ICON_MOVE} Move</button>` : ''}
-        ${hasMisc ? `<button class="ctrl-btn ctrl-tune" data-action="open-misc">${ICON_THERMOMETER} Misc</button>` : ''}
-        ${hasSystem ? `<button class="ctrl-btn ctrl-system" data-action="open-system">${ICON_MORE} More</button>` : ''}
+        ${hasMacros ? `<button class="ctrl-btn ctrl-tune" data-action="open-macros">${ICON_MACRO} ${this._t('macros')}</button>` : ''}
+        ${hasMovement ? `<button class="ctrl-btn ctrl-tune" data-action="open-movement">${ICON_MOVE} ${this._t('move')}</button>` : ''}
+        ${hasMisc ? `<button class="ctrl-btn ctrl-tune" data-action="open-misc">${ICON_THERMOMETER} ${this._t('misc')}</button>` : ''}
+        ${hasSystem ? `<button class="ctrl-btn ctrl-system" data-action="open-system">${ICON_MORE} ${this._t('more')}</button>` : ''}
       </div>
 
       <!-- Overlay -->
@@ -1197,7 +1284,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Macros sheet -->
       ${hasMacros ? `<div class="sheet" data-sheet="macros">
         <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MACRO} Macros</div>
+        <div class="sheet-title">${ICON_MACRO} ${this._t('macros')}</div>
         <div class="sheet-scroll">
         <div class="macro-list ${movementDisabled ? 'disabled' : ''}">
           ${this._macros.map(m => `<button class="macro-btn" data-action="run-macro" data-entity="${m.entity_id}" ${movementDisabled ? 'disabled' : ''}>
@@ -1210,7 +1297,7 @@ class PrinterCard3D extends HTMLElement {
       <!-- Movement sheet -->
       ${hasMovement ? `<div class="sheet" data-sheet="movement">
         <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MOVE} Movement</div>
+        <div class="sheet-title">${ICON_MOVE} ${this._t('movement')}</div>
         <div class="sheet-scroll">
 
         ${(posX != null || posY != null || posZ != null) ? `<div class="pos-bar ${movementDisabled ? 'disabled' : ''}">
@@ -1220,7 +1307,7 @@ class PrinterCard3D extends HTMLElement {
         </div>` : ''}
 
         <div class="home-row ${movementDisabled ? 'disabled' : ''}">
-          ${this._entityExists('home_all') ? `<button class="home-btn" data-action="home-axis" data-axis="all" ${movementDisabled ? 'disabled' : ''}>${ICON_HOME} All</button>` : ''}
+          ${this._entityExists('home_all') ? `<button class="home-btn" data-action="home-axis" data-axis="all" ${movementDisabled ? 'disabled' : ''}>${ICON_HOME} ${this._t('home_all')}</button>` : ''}
           ${this._entityExists('home_x') ? `<button class="home-btn home-x" data-action="home-axis" data-axis="x" ${movementDisabled ? 'disabled' : ''}>X</button>` : ''}
           ${this._entityExists('home_y') ? `<button class="home-btn home-y" data-action="home-axis" data-axis="y" ${movementDisabled ? 'disabled' : ''}>Y</button>` : ''}
           ${this._entityExists('home_z') ? `<button class="home-btn home-z" data-action="home-axis" data-axis="z" ${movementDisabled ? 'disabled' : ''}>Z</button>` : ''}
@@ -1253,7 +1340,7 @@ class PrinterCard3D extends HTMLElement {
 
         ${this._entityExists('speed_factor') ? `<div class="tune-row" style="margin-top:12px">
           <div class="tune-row-header">
-            <span class="tune-row-label">${ICON_SPEED} Speed</span>
+            <span class="tune-row-label">${ICON_SPEED} ${this._t('speed')}</span>
             <span class="tune-row-val mono" id="mv-speed-val">${fmtPct(speedFactor)}</span>
           </div>
           <input type="range" class="tune-slider" data-action="mv-speed-factor" min="10" max="200" step="1" value="${Math.round(speedFactor || 100)}"/>
@@ -1264,14 +1351,14 @@ class PrinterCard3D extends HTMLElement {
       <!-- Misc sheet (heaters + fans) -->
       ${hasMisc ? `<div class="sheet" data-sheet="misc">
         <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_THERMOMETER} Misc</div>
+        <div class="sheet-title">${ICON_THERMOMETER} ${this._t('misc')}</div>
         <div class="sheet-scroll">
         <div class="temps-body">
 
           ${(this._heaters.length > 0 || this._entityExists('hotend') || this._entityExists('bed')) ? `
-          <div class="temps-section-label">Temperatures</div>
+          <div class="temps-section-label">${this._t('temperatures')}</div>
           ${this._entityExists('hotend') ? `<div class="temp-row">
-            <div class="temp-row-info"><span class="temp-row-name">Hotend</span></div>
+            <div class="temp-row-info"><span class="temp-row-name">${this._t('hotend')}</span></div>
             <div class="temp-row-ctrl">
               <span class="temp-current mono">${hotendTemp != null ? hotendTemp.toFixed(1) + '°' : '—'}</span>
               ${this._entityExists('hotend_target') ? `
@@ -1287,7 +1374,7 @@ class PrinterCard3D extends HTMLElement {
             </div>
           </div>` : ''}
           ${this._entityExists('bed') ? `<div class="temp-row">
-            <div class="temp-row-info"><span class="temp-row-name">Bed</span></div>
+            <div class="temp-row-info"><span class="temp-row-name">${this._t('bed')}</span></div>
             <div class="temp-row-ctrl">
               <span class="temp-current mono">${bedTemp != null ? bedTemp.toFixed(1) + '°' : '—'}</span>
               ${this._entityExists('bed_target') ? `
@@ -1323,7 +1410,7 @@ class PrinterCard3D extends HTMLElement {
           </div>`).join('')}` : ''}
 
           ${this._fans.length > 0 ? `
-          <div class="temps-section-label" style="margin-top:${this._heaters.length > 0 ? '14px' : '0'}">Fans &amp; Outputs</div>
+          <div class="temps-section-label" style="margin-top:${this._heaters.length > 0 ? '14px' : '0'}">${this._t('fans_outputs')}</div>
           ${this._fans.map(f => `<div class="fan-row">
             <div class="fan-row-info">
               <span class="fan-name">${f.label}</span>
@@ -1346,26 +1433,26 @@ class PrinterCard3D extends HTMLElement {
       <!-- System sheet -->
       ${hasSystem ? `<div class="sheet" data-sheet="system">
         <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MORE} System</div>
+        <div class="sheet-title">${ICON_MORE} ${this._t('system')}</div>
         <div class="sheet-scroll">
         <div class="system-body">
 
           ${(this._entityExists('fw_restart') || this._entityExists('klipper_restart')) ? `
-          <div class="sys-section-label">Klipper Control</div>
-          ${this._entityExists('klipper_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.klipper_restart}">${ICON_RESTART} Restart Klipper</button>` : ''}
-          ${this._entityExists('fw_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.fw_restart}">${ICON_RESTART} Firmware Restart</button>` : ''}
+          <div class="sys-section-label">${this._t('klipper_control')}</div>
+          ${this._entityExists('klipper_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.klipper_restart}">${ICON_RESTART} ${this._t('restart_klipper')}</button>` : ''}
+          ${this._entityExists('fw_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.fw_restart}">${ICON_RESTART} ${this._t('firmware_restart')}</button>` : ''}
           ` : ''}
 
           ${this._serviceButtons.length > 0 ? `
-          <div class="sys-section-label">Service Control</div>
+          <div class="sys-section-label">${this._t('service_control')}</div>
           ${this._serviceButtons.map(b => `<button class="system-btn system-btn-service" data-action="system-action" data-entity="${b.entity_id}">${ICON_RESTART} ${b.label}</button>`).join('')}
           ` : ''}
 
           ${(this._entityExists('host_restart') || this._entityExists('host_shutdown') || this._entityExists('server_restart')) ? `
-          <div class="sys-section-label">Host Control</div>
-          ${this._entityExists('server_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.server_restart}">${ICON_RESTART} Server Restart</button>` : ''}
-          ${this._entityExists('host_restart') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_restart}">${ICON_EMERGENCY} Reboot Host</button>` : ''}
-          ${this._entityExists('host_shutdown') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_shutdown}">${ICON_EMERGENCY} Shutdown Host</button>` : ''}
+          <div class="sys-section-label">${this._t('host_control')}</div>
+          ${this._entityExists('server_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.server_restart}">${ICON_RESTART} ${this._t('server_restart')}</button>` : ''}
+          ${this._entityExists('host_restart') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_restart}">${ICON_EMERGENCY} ${this._t('reboot_host')}</button>` : ''}
+          ${this._entityExists('host_shutdown') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_shutdown}">${ICON_EMERGENCY} ${this._t('shutdown_host')}</button>` : ''}
           ` : ''}
 
         </div>
@@ -1375,14 +1462,14 @@ class PrinterCard3D extends HTMLElement {
 
     const camerasHtml = camCount > 0 ? `<button class="camera-btn ${this._camerasOpen ? 'active' : ''}" data-action="toggle-cameras">
         ${ICON_CAMERA}
-        <span>Cameras</span>
+        <span>${this._t('cameras')}</span>
         <span class="cam-badge">${camCount}</span>
         <span class="cam-chevron ${this._camerasOpen ? 'open' : ''}">${ICON_CHEVRON}</span>
       </button>
       <div class="cameras-section">
         <div class="camera-views">
           ${cameras.map((cam, i) => `<div class="cam-view">
-            <div class="cam-label">${cam.label || `Camera ${i + 1}`}</div>
+            <div class="cam-label">${cam.label || `${this._t('camera_fallback')} ${i + 1}`}</div>
             <div class="cam-stream-wrap" style="--cam-rotate:${cam.rotate}deg">
               <ha-camera-stream class="cam-stream" data-cam-idx="${i}" allow-exoplayer muted></ha-camera-stream>
             </div>
