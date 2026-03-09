@@ -70,6 +70,7 @@ Key features at a glance:
    - `/local/lovelace-3d-printer-card/lovelace-3d-printer-card.js` (the card)
    - `/local/lovelace-3d-printer-card/entities/en_generic.js`
    - `/local/lovelace-3d-printer-card/entities/de_generic.js`
+   - `/local/lovelace-3d-printer-card/entities/de_bambu_generic.js`
    Add each entity mapping file you use; see the `entities/` folder for available options.
 
 ### Add the card to your dashboard
@@ -106,7 +107,16 @@ base_entity: voron_24
 entity_mappings: de_generic
 ```
 
-**Check the `entities/` folder** in the repo to see which mapping files are available (e.g. `en_generic.js`, `de_generic.js`). Use the filename without `.js` as the value.
+**BambuLab with German HA** — use `de_bambu_generic` when the BambuLab integration exposes German entity names:
+
+```yaml
+type: custom:lovelace-3d-printer-card
+name: Bambu P1S
+base_entity: x1c_myprinter
+entity_mappings: de_bambu_generic
+```
+
+**Check the `entities/` folder** in the repo to see which mapping files are available (e.g. `en_generic.js`, `de_generic.js`, `de_bambu_generic.js`). Use the filename without `.js` as the value.
 
 **With a smart plug power button:**
 
@@ -126,7 +136,7 @@ power_switch: switch.printer_smart_plug
 | `base_entity` | string | **Yes** | Entity name prefix, e.g. `voron_24` |
 | `name` | string | No | Display name shown in the card header |
 | `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, or `cantilever` |
-| `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`). Default: `{hass.locale}_generic` or `en_generic` |
+| `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`, `de_bambu_generic`). Default: `{hass.locale}_generic` or `en_generic` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
 
@@ -268,6 +278,7 @@ The card relies on entity mapping files to discover printer entities and transla
 
 - `en_generic.js` — Moonraker/Klipper, English (default)
 - `de_generic.js` — Moonraker/Klipper, German (includes `verbleibende_zeit` for ETA)
+- `de_bambu_generic.js` — BambuLab (ha-bambulab), German — use when HA is set to German and the BambuLab integration uses translated entity names (e.g. `druckfortschritt`, `verbleibende_zeit`, `druckbetttemperatur`)
 
 ### How to contribute
 
