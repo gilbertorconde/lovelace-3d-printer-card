@@ -121,6 +121,7 @@ const STATE_COLORS = {
   'shutdown':   '#757575',
   'offline':    '#757575',
   'unknown':    '#757575',
+  'off':        '#4a4a4a',
 };
 
 function stateColor(status) {
@@ -881,7 +882,7 @@ class PrinterCard3D extends HTMLElement {
     const R = changedRoles;
     if (R.has('status') || R.has('printer_state') || R.has('power')) sections.add('header');
     if (R.has('current_print_message') || R.has('current_display_message')) sections.add('msg');
-    if (R.has('progress') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('status')) sections.add('printer');
+    if (R.has('progress') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('status') || R.has('power')) sections.add('printer');
     if (R.has('hotend') || R.has('bed') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('speed_factor') || R.has('flow_factor') || R.has('base')) sections.add('stats');
     if (R.has('progress') || R.has('duration') || R.has('eta') || R.has('current_layer') || R.has('total_layers') || R.has('filament_used') || R.has('filename') || R.has('thumbnail') || R.has('status')) sections.add('tiles');
     if (R.has('status')) sections.add('controls');
@@ -903,6 +904,9 @@ class PrinterCard3D extends HTMLElement {
   _effectiveStatus() {
     const printerState = (this._stVal('printer_state') || '').toLowerCase();
     const printState = (this._stVal('status') || '').toLowerCase();
+    // Power switch off takes top priority
+    const ps = this._config?.power_switch;
+    if (ps && this._hass?.states[ps]?.state === 'off') return 'off';
     if (printerState === 'error' || printerState === 'shutdown' || printerState === 'startup') return printerState;
     return printState || printerState || 'idle';
   }
@@ -915,6 +919,14 @@ class PrinterCard3D extends HTMLElement {
   _isPaused() {
     const s = this._effectiveStatus();
     return s === 'paused';
+  }
+
+  _isPowerOff() {
+    const printerState = (this._stVal('printer_state') || '').toLowerCase();
+    if (printerState === 'shutdown') return true;
+    const ps = this._config?.power_switch;
+    if (ps && this._hass?.states[ps]?.state === 'off') return true;
+    return false;
   }
 
   // ── Animation ───────────────────────────────────────────────────────────────
@@ -1176,8 +1188,9 @@ class PrinterCard3D extends HTMLElement {
 
       <!-- Printer SVG -->
       <div class="printer-section">
-        <div class="printer-svg-wrap">
+        <div class="printer-svg-wrap${this._isPowerOff() ? ' printer-off' : ''}">
           ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, this._numVal('chamber_target') ?? chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
+          ${this._isPowerOff() ? `<div class="printer-off-overlay"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.5"><path d="M16.56 5.44l-1.45 1.45A6.97 6.97 0 0 1 17 12a5 5 0 0 1-5 5 5 5 0 0 1-5-5c0-2.04 1.1-3.8 2.71-4.77L8.27 5.79A8.97 8.97 0 0 0 5 12a7 7 0 0 0 7 7 7 7 0 0 0 7-7c0-2.57-1.36-4.81-3.44-6.11zM13 3h-2v10h2V3z"/></svg></div>` : ''}
         </div>
       </div>
 
@@ -1717,7 +1730,9 @@ class PrinterCard3D extends HTMLElement {
 
 /* ── Printer SVG ── */
 .printer-section { display:flex; justify-content:center; align-items:center; margin:8px 0; }
-.printer-svg-wrap { width:100%; max-width:200px; height:180px; }
+.printer-svg-wrap { width:100%; max-width:200px; height:180px; position:relative; }
+.printer-off { opacity:0.35; filter:grayscale(1); }
+.printer-off-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--primary-text-color); opacity:1; pointer-events:none; }
 
 /* ── Stats bar ── */
 .stats-bar { display:flex; justify-content:space-around; gap:4px; margin:8px 0 12px; flex-wrap:wrap; }
