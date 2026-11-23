@@ -1,28 +1,22 @@
 // =============================================================================
-// Lovelace 3D Printer Card  v1.0.0
-// A HACS-installable Home Assistant Lovelace card for Moonraker-based printers.
+// Lovelace 3D Printer Card  v3.0.0
+// Dark, app-style card for Moonraker/Klipper printers (and others whose
+// entities follow the same naming), with live printer drawing and cameras.
 //
-// Install via HACS or manually:
-//   Place this file in:  /config/www/lovelace-3d-printer-card/lovelace-3d-printer-card.js
-//   Register as a Lovelace resource (type: module):
-//     url: /local/lovelace-3d-printer-card/lovelace-3d-printer-card.js
-//
-// Usage:
 //   type: custom:lovelace-3d-printer-card
-//   name: My Printer
-//   base_entity: voron_24
-//   printer_type: i3          # i3 | corexy | cantilever
+//   name: Voron 2.4
+//   base_entity: voron
+//   printer_type: corexy-flying-gantry   # i3 | corexy | corexy-flying-gantry | cantilever
+//   power_switch: switch.voron           # optional smart plug
+//   variant: compact                     # optional: glance card + Full controls dialog
 //
-// All entity IDs are auto-derived from base_entity, with optional overrides:
-//   entities:
-//     progress: sensor.my_printer_print_progress
-//     status: sensor.my_printer_current_print_state
-//     ...
+// Entities are discovered from base_entity; see README for the roles.
 // =============================================================================
 
 const CARD_TAG = 'lovelace-3d-printer-card';
+const CARD_VERSION = '3.0.0';
 
-// ── Default entity mappings (fallback when fetch fails) ────────────────────────
+// ── Default entity mappings (fallback when the mapping file can't load) ──────
 const DEFAULT_MAPPINGS = {
   sensor: [
     ['status', ['current_print_state']],
@@ -68,6 +62,7 @@ const DEFAULT_MAPPINGS = {
   camera: [['thumbnail', ['thumbnail']]],
 };
 
+// UI strings. A mapping file's `ui` block overrides these; missing keys fall back here.
 const DEFAULT_UI = {
   eta: 'ETA',
   elapsed: 'Elapsed',
@@ -101,45 +96,113 @@ const DEFAULT_UI = {
   cameras: 'Cameras',
   camera_fallback: 'Camera',
   home_all: 'All',
+  // 3.0
+  printer: 'Printer',
+  tune: 'Tune',
+  left: 'Left',
+  done_at: 'Done at',
+  layer: 'Layer',
+  filament_used: 'filament used',
+  tap_heater: 'Tap a heater to set it',
+  drag_to_change: 'Drag to change',
+  target: 'target',
+  off: 'Off',
+  turn_on: 'Turn on',
+  powered_off: 'Powered off',
+  plug_off: 'The smart plug is off.',
+  offline: 'Not reachable',
+  offline_msg: "The printer isn't reachable. Controls come back when it reconnects.",
+  prints: 'Prints',
+  print_time: 'Print time',
+  filament: 'Filament',
+  full_controls: 'Full controls',
+  tap_again: 'Tap again',
+  estop: 'Emergency stop (tap twice)',
+  estop_armed: 'Tap again to stop the printer now',
+  step: 'Step',
+  home: 'Home',
+  st_printing: 'Printing',
+  st_paused: 'Paused',
+  st_standby: 'Standby',
+  st_ready: 'Ready',
+  st_idle: 'Idle',
+  st_complete: 'Complete',
+  st_cancelled: 'Cancelled',
+  st_error: 'Error',
+  st_shutdown: 'Shutdown',
+  st_startup: 'Starting',
+  st_off: 'Off',
+  st_offline: 'Offline',
 };
+
+// Material Design Icons paths (@mdi/js 7.4.47), inlined so the card needs no icon font.
+const ICONS = {
+  'printer3d-nozzle': 'M7,2H17V8H19V13H16.5L13,17H11L7.5,13H5V8H7V2M10,22H2V20H10A1,1 0 0,0 11,19V18H13V19A3,3 0 0,1 10,22Z',
+  'printer3d': 'M19,6A1,1 0 0,0 20,5A1,1 0 0,0 19,4A1,1 0 0,0 18,5A1,1 0 0,0 19,6M19,2A3,3 0 0,1 22,5V11H18V7H6V11H2V5A3,3 0 0,1 5,2H19M18,18.25C18,18.63 17.79,18.96 17.47,19.13L12.57,21.82C12.4,21.94 12.21,22 12,22C11.79,22 11.59,21.94 11.43,21.82L6.53,19.13C6.21,18.96 6,18.63 6,18.25V13C6,12.62 6.21,12.29 6.53,12.12L11.43,9.68C11.59,9.56 11.79,9.5 12,9.5C12.21,9.5 12.4,9.56 12.57,9.68L17.47,12.12C17.79,12.29 18,12.62 18,13V18.25M12,11.65L9.04,13L12,14.6L14.96,13L12,11.65M8,17.66L11,19.29V16.33L8,14.71V17.66M16,17.66V14.71L13,16.33V19.29L16,17.66Z',
+  'power': 'M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M13,3H11V13H13',
+  'close': 'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z',
+  'alert-octagon-outline': 'M8.27,3L3,8.27V15.73L8.27,21H15.73C17.5,19.24 21,15.73 21,15.73V8.27L15.73,3M9.1,5H14.9L19,9.1V14.9L14.9,19H9.1L5,14.9V9.1M11,15H13V17H11V15M11,7H13V13H11V7',
+  'pause': 'M14,19H18V5H14M6,19H10V5H6V19Z',
+  'play': 'M8,5.14V19.14L19,12.14L8,5.14Z',
+  'stop': 'M18,18H6V6H18V18Z',
+  'cube-outline': 'M21,16.5C21,16.88 20.79,17.21 20.47,17.38L12.57,21.82C12.41,21.94 12.21,22 12,22C11.79,22 11.59,21.94 11.43,21.82L3.53,17.38C3.21,17.21 3,16.88 3,16.5V7.5C3,7.12 3.21,6.79 3.53,6.62L11.43,2.18C11.59,2.06 11.79,2 12,2C12.21,2 12.41,2.06 12.57,2.18L20.47,6.62C20.79,6.79 21,7.12 21,7.5V16.5M12,4.15L6.04,7.5L12,10.85L17.96,7.5L12,4.15M5,15.91L11,19.29V12.58L5,9.21V15.91M19,15.91V9.21L13,12.58V19.29L19,15.91Z',
+  'cctv': 'M6.03 12.03L8.03 15.5L5.5 18.68L2 12.62L6.03 12.03M17 18V15.29C17.88 14.9 18.5 14.03 18.5 13C18.5 12.43 18.3 11.9 17.97 11.5L19.94 10.35C20.95 9.76 21.3 8.47 20.71 7.46L19.33 5.06C18.74 4.05 17.45 3.7 16.44 4.28L8.31 9C7.36 9.53 7.03 10.75 7.58 11.71L9.08 14.31C9.63 15.26 10.86 15.59 11.81 15.04L13.69 13.96C13.94 14.55 14.41 15.03 15 15.29V18C15 19.1 15.9 20 17 20H22V18H17Z',
+  'printer3d-nozzle-heat': 'M4 2H14V7H16V13H13.5L10 17H8L4.5 13H2V7H4V2M23 14.5L21.6 16.7L23 18.9L21 22L19.2 21.1L20.7 18.9L19.2 16.7L21.2 13.6L23 14.5M18.7 14.5L17.2 16.7L18.7 18.9L16.7 22L14.9 21.1L16.3 18.9L14.9 16.7L16.9 13.6L18.7 14.5',
+  'radiator': 'M7.95,3L6.53,5.19L7.95,7.4H7.94L5.95,10.5L4.22,9.6L5.64,7.39L4.22,5.19L6.22,2.09L7.95,3M13.95,2.89L12.53,5.1L13.95,7.3L13.94,7.31L11.95,10.4L10.22,9.5L11.64,7.3L10.22,5.1L12.22,2L13.95,2.89M20,2.89L18.56,5.1L20,7.3V7.31L18,10.4L16.25,9.5L17.67,7.3L16.25,5.1L18.25,2L20,2.89M2,22V14A2,2 0 0,1 4,12H20A2,2 0 0,1 22,14V22H20V20H4V22H2M6,14A1,1 0 0,0 5,15V17A1,1 0 0,0 6,18A1,1 0 0,0 7,17V15A1,1 0 0,0 6,14M10,14A1,1 0 0,0 9,15V17A1,1 0 0,0 10,18A1,1 0 0,0 11,17V15A1,1 0 0,0 10,14M14,14A1,1 0 0,0 13,15V17A1,1 0 0,0 14,18A1,1 0 0,0 15,17V15A1,1 0 0,0 14,14M18,14A1,1 0 0,0 17,15V17A1,1 0 0,0 18,18A1,1 0 0,0 19,17V15A1,1 0 0,0 18,14Z',
+  'heat-wave': 'M8.5 4.5L5.4 9.5L8.5 14.7L5.2 20.5L3.4 19.6L6.1 14.7L3 9.5L6.7 3.6L8.5 4.5M14.7 4.4L11.6 9.5L14.7 14.5L11.4 20.3L9.6 19.4L12.3 14.5L9.2 9.5L12.9 3.5L14.7 4.4M21 4.4L17.9 9.5L21 14.5L17.7 20.3L15.9 19.4L18.6 14.5L15.5 9.5L19.2 3.5L21 4.4',
+  'thermometer': 'M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z',
+  'chip': 'M6,4H18V5H21V7H18V9H21V11H18V13H21V15H18V17H21V19H18V20H6V19H3V17H6V15H3V13H6V11H3V9H6V7H3V5H6V4M11,15V18H12V15H11M13,15V18H14V15H13M15,15V18H16V15H15Z',
+  'tune-vertical': 'M7 3H5V9H7V3M19 3H17V13H19V3M3 13H5V21H7V13H9V11H3V13M15 7H13V3H11V7H9V9H15V7M11 21H13V11H11V21M15 15V17H17V21H19V17H21V15H15Z',
+  'axis-arrow': 'M12,2L16,6H13V13.85L19.53,17.61L21,15.03L22.5,20.5L17,21.96L18.53,19.35L12,15.58L5.47,19.35L7,21.96L1.5,20.5L3,15.03L4.47,17.61L11,13.85V6H8L12,2Z',
+  'code-braces': 'M8,3A2,2 0 0,0 6,5V9A2,2 0 0,1 4,11H3V13H4A2,2 0 0,1 6,15V19A2,2 0 0,0 8,21H10V19H8V14A2,2 0 0,0 6,12A2,2 0 0,0 8,10V5H10V3M16,3A2,2 0 0,1 18,5V9A2,2 0 0,0 20,11H21V13H20A2,2 0 0,0 18,15V19A2,2 0 0,1 16,21H14V19H16V14A2,2 0 0,1 18,12A2,2 0 0,1 16,10V5H14V3H16Z',
+  'cog-outline': 'M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M10,22C9.75,22 9.54,21.82 9.5,21.58L9.13,18.93C8.5,18.68 7.96,18.34 7.44,17.94L4.95,18.95C4.73,19.03 4.46,18.95 4.34,18.73L2.34,15.27C2.21,15.05 2.27,14.78 2.46,14.63L4.57,12.97L4.5,12L4.57,11L2.46,9.37C2.27,9.22 2.21,8.95 2.34,8.73L4.34,5.27C4.46,5.05 4.73,4.96 4.95,5.05L7.44,6.05C7.96,5.66 8.5,5.32 9.13,5.07L9.5,2.42C9.54,2.18 9.75,2 10,2H14C14.25,2 14.46,2.18 14.5,2.42L14.87,5.07C15.5,5.32 16.04,5.66 16.56,6.05L19.05,5.05C19.27,4.96 19.54,5.05 19.66,5.27L21.66,8.73C21.79,8.95 21.73,9.22 21.54,9.37L19.43,11L19.5,12L19.43,13L21.54,14.63C21.73,14.78 21.79,15.05 21.66,15.27L19.66,18.73C19.54,18.95 19.27,19.04 19.05,18.95L16.56,17.95C16.04,18.34 15.5,18.68 14.87,18.93L14.5,21.58C14.46,21.82 14.25,22 14,22H10M11.25,4L10.88,6.61C9.68,6.86 8.62,7.5 7.85,8.39L5.44,7.35L4.69,8.65L6.8,10.2C6.4,11.37 6.4,12.64 6.8,13.8L4.68,15.36L5.43,16.66L7.86,15.62C8.63,16.5 9.68,17.14 10.87,17.38L11.24,20H12.76L13.13,17.39C14.32,17.14 15.37,16.5 16.14,15.62L18.57,16.66L19.32,15.36L17.2,13.81C17.6,12.64 17.6,11.37 17.2,10.2L19.31,8.65L18.56,7.35L16.15,8.39C15.38,7.5 14.32,6.86 13.12,6.62L12.75,4H11.25Z',
+  'chevron-down': 'M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z',
+  'chevron-right': 'M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z',
+  'arrow-up': 'M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z',
+  'arrow-down': 'M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z',
+  'arrow-left': 'M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z',
+  'arrow-right': 'M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z',
+  'home': 'M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z',
+  'restart': 'M12,4C14.1,4 16.1,4.8 17.6,6.3C20.7,9.4 20.7,14.5 17.6,17.6C15.8,19.5 13.3,20.2 10.9,19.9L11.4,17.9C13.1,18.1 14.9,17.5 16.2,16.2C18.5,13.9 18.5,10.1 16.2,7.7C15.1,6.6 13.5,6 12,6V10.6L7,5.6L12,0.6V4M6.3,17.6C3.7,15 3.3,11 5.1,7.9L6.6,9.4C5.5,11.6 5.9,14.4 7.8,16.2C8.3,16.7 8.9,17.1 9.6,17.4L9,19.4C8,19 7.1,18.4 6.3,17.6Z',
+  'information-outline': 'M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z',
+  'alert-outline': 'M12,2L1,21H23M12,6L19.53,19H4.47M11,10V14H13V10M11,16V18H13V16',
+  'file-outline': 'M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z',
+  'minus': 'M19,13H5V11H19V13Z',
+  'plus': 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
+  'fan': 'M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z',
+  'lightbulb-outline': 'M12,2A7,7 0 0,1 19,9C19,11.38 17.81,13.47 16,14.74V17A1,1 0 0,1 15,18H9A1,1 0 0,1 8,17V14.74C6.19,13.47 5,11.38 5,9A7,7 0 0,1 12,2M9,21V20H15V21A1,1 0 0,1 14,22H10A1,1 0 0,1 9,21M12,4A5,5 0 0,0 7,9C7,11.05 8.23,12.81 10,13.58V16H14V13.58C15.77,12.81 17,11.05 17,9A5,5 0 0,0 12,4Z',
+  'cloud-off-outline': 'M19.8 22.6L17.15 20H6.5Q4.2 20 2.6 18.4T1 14.5Q1 12.58 2.19 11.08 3.38 9.57 5.25 9.15 5.33 8.95 5.4 8.76 5.5 8.57 5.55 8.35L1.4 4.2L2.8 2.8L21.2 21.2M6.5 18H15.15L7.1 9.95Q7.05 10.23 7.03 10.5 7 10.73 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18M11.13 14M21.6 18.75L20.15 17.35Q20.58 17 20.79 16.54 21 16.08 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 11.33 6 10.7 6.16 10.07 6.33 9.5 6.68L8.05 5.23Q8.93 4.63 9.91 4.31 10.9 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 16.5 22.63 17.31 22.25 18.15 21.6 18.75M14.83 12.03Z',
+  'power-plug-off-outline': 'M22.11 21.46L2.39 1.73L1.11 3L6.25 8.14C6.1 8.41 6 8.7 6 9V14.5L9.5 18V21H14.5V18L15.31 17.2L20.84 22.73L22.11 21.46M13.09 16.59L12.67 17H11.33L10.92 16.59L8 13.67V9.89L13.89 15.78L13.09 16.59M12.2 9L10.2 7H14V3H16V7C17 7 18 8 18 9V14.5L17.85 14.65L16 12.8V9.09C16 9.06 15.95 9 15.92 9H12.2M10 6.8L8 4.8V3H10V6.8Z',
+  'speedometer': 'M12,16A3,3 0 0,1 9,13C9,11.88 9.61,10.9 10.5,10.39L20.21,4.77L14.68,14.35C14.18,15.33 13.17,16 12,16M12,3C13.81,3 15.5,3.5 16.97,4.32L14.87,5.53C14,5.19 13,5 12,5A8,8 0 0,0 4,13C4,15.21 4.89,17.21 6.34,18.65H6.35C6.74,19.04 6.74,19.67 6.35,20.06C5.96,20.45 5.32,20.45 4.93,20.07V20.07C3.12,18.26 2,15.76 2,13A10,10 0 0,1 12,3M22,13C22,15.76 20.88,18.26 19.07,20.07V20.07C18.68,20.45 18.05,20.45 17.66,20.06C17.27,19.67 17.27,19.04 17.66,18.65V18.65C19.11,17.2 20,15.21 20,13C20,12 19.81,11 19.46,10.1L20.67,8C21.5,9.5 22,11.18 22,13Z',
+  'waves': 'M20,12H22V14H20C18.62,14 17.26,13.65 16,13C13.5,14.3 10.5,14.3 8,13C6.74,13.65 5.37,14 4,14H2V12H4C5.39,12 6.78,11.53 8,10.67C10.44,12.38 13.56,12.38 16,10.67C17.22,11.53 18.61,12 20,12M20,6H22V8H20C18.62,8 17.26,7.65 16,7C13.5,8.3 10.5,8.3 8,7C6.74,7.65 5.37,8 4,8H2V6H4C5.39,6 6.78,5.53 8,4.67C10.44,6.38 13.56,6.38 16,4.67C17.22,5.53 18.61,6 20,6M20,18H22V20H20C18.62,20 17.26,19.65 16,19C13.5,20.3 10.5,20.3 8,19C6.74,19.65 5.37,20 4,20H2V18H4C5.39,18 6.78,17.53 8,16.67C10.44,18.38 13.56,18.38 16,16.67C17.22,17.53 18.61,18 20,18Z',
+  'layers-outline': 'M12,18.54L19.37,12.8L21,14.07L12,21.07L3,14.07L4.62,12.81L12,18.54M12,16L3,9L12,2L21,9L12,16M12,4.53L6.26,9L12,13.47L17.74,9L12,4.53Z',
+  'clock-outline': 'M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z',
+};
+
+function ico(name, size = 18) {
+  const d = ICONS[name];
+  return d ? `<svg class="i" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><path d="${d}"/></svg>` : '';
+}
 
 // ── State colours ─────────────────────────────────────────────────────────────
 const STATE_COLORS = {
-  printing:     '#4caf50',
-  paused:       '#e5c000',
-  idle:         '#757575',
-  ready:        '#757575',
-  standby:      '#42a5f5',
-  error:        '#f44336',
-  cancelled:    '#f44336',
-  'printing':   '#4caf50',
-  'pausing':    '#e5c000',
-  'resuming':   '#4caf50',
-  'loading':    '#42a5f5',
-  'complete':   '#4caf50',
-  'startup':    '#42a5f5',
-  'shutdown':   '#757575',
-  'offline':    '#757575',
-  'unknown':    '#757575',
-  'off':        '#4a4a4a',
+  printing: '#4ade80', resuming: '#4ade80', complete: '#4ade80',
+  paused: '#ffb347', pausing: '#ffb347',
+  standby: '#8aa2ff', ready: '#8aa2ff', idle: '#8aa2ff', startup: '#8aa2ff', loading: '#8aa2ff',
+  error: '#ff5c6c', cancelled: '#ff5c6c', shutdown: '#ff5c6c',
+  off: '#8b93a3', offline: '#8b93a3', unknown: '#8b93a3',
 };
 
 function stateColor(status) {
-  if (!status) return STATE_COLORS.idle;
-  const s = status.toLowerCase();
-  for (const [key, color] of Object.entries(STATE_COLORS)) {
-    if (s.includes(key)) return color;
-  }
+  const s = (status || 'idle').toLowerCase();
+  if (STATE_COLORS[s]) return STATE_COLORS[s];
+  for (const [key, color] of Object.entries(STATE_COLORS)) if (s.includes(key)) return color;
   return STATE_COLORS.idle;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function hexA(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function fmtSeconds(secs) {
   if (secs == null || isNaN(secs) || secs < 0) return null;
@@ -156,7 +219,7 @@ function parseDurationToSeconds(v) {
   if (v == null) return null;
   const s = String(v).trim();
   const n = parseFloat(s);
-  if (!isNaN(n) && s === String(n)) return n; // plain number (seconds)
+  if (!isNaN(n) && s === String(n)) return n;
   let total = 0;
   const h = s.match(/(\d+)\s*h(?:ours?)?/i);
   const m = s.match(/(\d+)\s*m(?:in(?:utes?)?)?(?!\s*s)/i) || s.match(/(\d+)\s*min/i);
@@ -165,42 +228,23 @@ function parseDurationToSeconds(v) {
   if (m) total += parseInt(m[1], 10) * 60;
   if (sec) total += parseInt(sec[1], 10);
   if (total > 0) return total;
-  if (!isNaN(n) && n > 0) return n; // fallback: first number (e.g. "In 2 hours" -> 2)
+  if (!isNaN(n) && n > 0) return n;
   return null;
 }
 
-function fmtTemp(val, unit = '°C') {
-  if (val == null || val === 'unknown' || val === 'unavailable') return '—';
-  const n = parseFloat(val);
-  if (isNaN(n)) return '—';
-  return `${Math.round(n)}${unit}`;
-}
-
-function fmtPct(val) {
-  if (val == null || val === 'unknown' || val === 'unavailable') return '—';
-  const n = parseFloat(val);
-  if (isNaN(n)) return '—';
-  return `${Math.round(n)}%`;
-}
-
-function fmtETA(remainingSecs) {
+/** Finish clock time, following HA's language and 12/24-hour setting. */
+function fmtClock(remainingSecs, locale) {
   if (!remainingSecs || isNaN(remainingSecs)) return null;
-  const eta = new Date(Date.now() + remainingSecs * 1000);
-  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function truncate(str, maxLen = 22) {
-  if (!str) return '';
-  const base = str.replace(/\.gcode$/i, '');
-  if (base.length <= maxLen) return base;
-  return base.slice(0, maxLen - 1) + '…';
+  const tf = locale?.time_format;
+  const opts = { hour: 'numeric', minute: '2-digit' };
+  if (tf === '12' || tf === '24') opts.hour12 = tf === '12';
+  const lang = tf === 'system' ? undefined : (locale?.language || undefined);
+  return new Date(Date.now() + remainingSecs * 1000).toLocaleTimeString(lang, opts);
 }
 
 function stVal(hass, entityId) {
-  if (!hass || !entityId) return null;
-  const st = hass.states[entityId];
-  if (!st) return null;
-  if (st.state === 'unknown' || st.state === 'unavailable') return null;
+  const st = hass?.states?.[entityId];
+  if (!st || st.state === 'unknown' || st.state === 'unavailable') return null;
   return st.state;
 }
 
@@ -211,347 +255,116 @@ function numVal(hass, entityId) {
   return isNaN(n) ? null : n;
 }
 
+function attrVal(hass, entityId, attr) {
+  return hass?.states?.[entityId]?.attributes?.[attr] ?? null;
+}
+
+// Seconds from a duration-ish entity: Moonraker reports print_duration in min,
+// print_time_left in h, print_eta as a timestamp; others send "2h 10m".
 function durationVal(hass, entityId) {
   const v = stVal(hass, entityId);
   if (v == null) return null;
   const deviceClass = attrVal(hass, entityId, 'device_class') || '';
   const unit = (attrVal(hass, entityId, 'unit_of_measurement') || '').toLowerCase();
   const s = String(v).trim();
-
-  // Timestamp (print_eta): ISO date → seconds from now until that time
   if (deviceClass === 'timestamp' && /^\d{4}-\d{2}-\d{2}T/.test(s)) {
     const t = new Date(s).getTime();
     if (!isNaN(t)) return Math.max(0, (t - Date.now()) / 1000);
   }
-
   const n = parseFloat(v);
   if (!isNaN(n) && s === String(n)) {
     if (unit === 'min' || unit === 'minute' || unit === 'minutes') return n * 60;
     if (unit === 'h' || unit === 'hour' || unit === 'hours') return n * 3600;
-    return n; // assume seconds
+    if (unit === 'd' || unit === 'day' || unit === 'days') return n * 86400;
+    return n;
   }
   return parseDurationToSeconds(v);
 }
 
-function attrVal(hass, entityId, attr) {
-  if (!hass || !entityId) return null;
-  const st = hass.states[entityId];
-  if (!st) return null;
-  return st.attributes?.[attr] ?? null;
-}
+// ── Printer drawing ───────────────────────────────────────────────────────────
+// One drawing per printer_type, all in the same dark style: the object grows
+// layer by layer with progress, heaters glow while they have a target, and the
+// toolhead sweeps while printing.
+function printerSvg(type, s) {
+  const t = (type || 'i3').toLowerCase();
+  const p = clamp(s.p || 0, 0, 1);
+  const HOT = s.hot ? '#ff7a45' : '#5a6170';
+  const BED = s.bed ? '#3fa9ff' : '#4a5160';
+  const FR = 'rgba(255,255,255,.16)';
+  const OBJ = '#5eead4';
+  const cx = 125, objMax = 92, objW = 50;
+  const objH = objMax * p;
+  const movingBed = t === 'corexy';
+  const nozzleY = movingBed ? 66 : 182 - objH - 2;
+  const bedTop = movingBed ? nozzleY + 2 + objH : 182;
 
-function friendlyLabel(entityId, prefix) {
-  // Strip friendly_name prefix noise, e.g. "Gilbot Nova Macro Filament Load" → "Filament Load"
-  return entityId
-    .replace(/^[^.]+\./, '')          // remove domain
-    .replace(prefix, '')               // remove base prefix
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .trim();
-}
+  let frame = '';
+  if (t === 'i3') {
+    frame = `<rect x="26" y="198" width="198" height="10" rx="4" fill="rgba(255,255,255,.08)"/>
+      <rect x="36" y="18" width="10" height="182" rx="3" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
+      <rect x="204" y="18" width="10" height="182" rx="3" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
+      <line x1="41" y1="20" x2="209" y2="20" stroke="${FR}" stroke-width="3" stroke-linecap="round"/>
+      <rect x="33" y="${nozzleY - 27}" width="16" height="14" rx="3" fill="#252b36" stroke="${FR}"/>
+      <rect x="201" y="${nozzleY - 27}" width="16" height="14" rx="3" fill="#252b36" stroke="${FR}"/>`;
+  } else if (t === 'cantilever') {
+    frame = `<rect x="26" y="198" width="198" height="10" rx="4" fill="rgba(255,255,255,.08)"/>
+      <rect x="38" y="16" width="14" height="184" rx="4" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
+      <rect x="34" y="${nozzleY - 28}" width="22" height="16" rx="3" fill="#252b36" stroke="${FR}"/>`;
+  } else {
+    frame = `<rect x="22" y="14" width="206" height="200" rx="10" fill="#0f1218" stroke="${FR}" stroke-width="2"/>
+      <rect x="30" y="22" width="190" height="184" rx="6" fill="none" stroke="rgba(255,255,255,.05)"/>
+      ${[22, 228].map((x) => `<rect x="${x - 4}" y="10" width="8" height="8" rx="2" fill="${FR}"/><rect x="${x - 4}" y="210" width="8" height="8" rx="2" fill="${FR}"/>`).join('')}
+      ${s.cham ? `<rect x="30" y="22" width="190" height="184" rx="6" fill="#a78bfa" opacity=".07"><animate attributeName="opacity" values=".05;.13;.05" dur="3s" repeatCount="indefinite"/></rect>` : ''}`;
+  }
 
-// ── Arc math (same technique as AC Card) ──────────────────────────────────────
-function arcPath(cx, cy, r, startDeg, sweepDeg) {
-  const start = (startDeg - 90) * Math.PI / 180;
-  const end = (startDeg + sweepDeg - 90) * Math.PI / 180;
-  const x1 = cx + r * Math.cos(start);
-  const y1 = cy + r * Math.sin(start);
-  const x2 = cx + r * Math.cos(end);
-  const y2 = cy + r * Math.sin(end);
-  const large = sweepDeg > 180 ? 1 : 0;
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
-}
+  const barY = nozzleY - 20;
+  const bar = t === 'cantilever'
+    ? `<line x1="52" y1="${barY}" x2="214" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`
+    : t === 'i3'
+      ? `<line x1="46" y1="${barY}" x2="204" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`
+      : `<line x1="34" y1="${barY}" x2="216" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`;
 
-// ── SVG Printer Graphics ──────────────────────────────────────────────────────
-function _buildObject(progress, maxHeight, objectWidth) {
-  const TOTAL_LINES = 12;
-  const lineH = maxHeight / TOTAL_LINES;
-  const rectH = Math.max(0.5, lineH - 1); // clamp to avoid negative height when objH is small
-  const filled = Math.round(progress * TOTAL_LINES);
-  let lines = '';
-  for (let i = 0; i < TOTAL_LINES; i++) {
-    const lineIdx = TOTAL_LINES - 1 - i;
-    const y = 0 + i * lineH;
-    const isDone = lineIdx < filled;
-    if (isDone) {
-      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${rectH}" rx="1" fill="currentColor" opacity="0.85"/>`;
-    } else {
-      lines += `<rect x="0" y="${y}" width="${objectWidth}" height="${rectH}" rx="1" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.3" stroke-dasharray="3 2"/>`;
+  // Object: finished layers, plus a faint outline of the whole part on fixed beds.
+  let obj = '';
+  if (p > 0) {
+    if (!movingBed) obj += `<rect x="${cx - objW / 2}" y="${bedTop - objMax}" width="${objW}" height="${objMax}" rx="3" fill="none" stroke="${OBJ}" stroke-opacity=".16" stroke-dasharray="3 3"/>`;
+    const lh = objMax / 12;
+    const n = Math.ceil(objH / lh);
+    for (let i = 0; i < n; i++) {
+      const top = Math.max(bedTop - objH, bedTop - (i + 1) * lh);
+      const h = bedTop - i * lh - top - 1;
+      if (h <= 0.3) continue;
+      obj += `<rect x="${cx - objW / 2 + (i % 2)}" y="${top.toFixed(1)}" width="${objW - (i % 3 ? 1 : 0)}" height="${h.toFixed(1)}" rx="1.2" fill="${OBJ}" opacity="${(0.5 + 0.45 * (i + 1) / 12).toFixed(2)}"/>`;
     }
   }
-  return `<g class="print-object">${lines}</g>`;
-}
 
-function svgPrinterI3(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
-  const W = 200, H = 180;
-  const frameColor = 'var(--primary-text-color)';
-  const accentColor = 'var(--mode-color)';
-  const rodLeft = 30, rodRight = 170;
-  const rodTop = 18, rodBottom = 155;
-  const bedY = 140;
-  const bedW = 100, bedH = 10;
-  const bedX = (W - bedW) / 2;
-  const objMaxH = bedY - rodTop - 36;
-  const objH = Math.max(4, objMaxH * progress);
-  const objY = bedY - objH;
-  const filled = Math.round(progress * 12);
-  const lineH = objH / 12;
-  const topOfPrintedY = filled > 0 ? objY + (12 - filled) * lineH : bedY;
-  const nozzleTipOffset = 18;
-  const gantryY = topOfPrintedY - nozzleTipOffset;
-  const nozzleXPos = 55 + (nozzleX ?? 0.5) * 90;
-  const nozzleYPos = gantryY + 10;
-  const objW = 56;
-  const objX = W / 2 - objW / 2;
-  const hotendGlow = hotendOn
-    ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
+  const zRods = movingBed
+    ? `<path d="M60 ${bedTop + 7}V206M190 ${bedTop + 7}V206" stroke="rgba(255,255,255,.14)" stroke-width="1.5" stroke-dasharray="4 3"/>`
     : '';
-  const bedGlow = bedOn
-    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
-    : '';
-  const chamberGlow = chamberOn
-    ? `<rect x="${rodLeft - 10}" y="${rodTop - 10}" width="${rodRight - rodLeft + 20}" height="${rodBottom - rodTop + 25}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
-    : '';
-  const nozzleAnim = isPrinting
-    ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;0,0;-3,0;0,0" dur="4s" repeatCount="indefinite"/>`
-    : '';
-  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
-  ${chamberGlow}
-  <rect x="${rodLeft - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
-  <rect x="${rodRight - 6}" y="${rodTop - 8}" width="12" height="${rodBottom - rodTop + 16}" rx="3" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.3"/>
-  <line x1="${rodLeft}" y1="${rodTop}" x2="${rodLeft}" y2="${rodBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.45" stroke-linecap="round"/>
-  <line x1="${rodRight}" y1="${rodTop}" x2="${rodRight}" y2="${rodBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.45" stroke-linecap="round"/>
-  <line x1="${rodLeft}" y1="${rodTop}" x2="${rodRight}" y2="${rodTop}" stroke="${frameColor}" stroke-width="3" opacity="0.35" stroke-linecap="round"/>
-  <line x1="${rodLeft + 6}" y1="${gantryY}" x2="${rodRight - 6}" y2="${gantryY}" stroke="${frameColor}" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
-  <rect x="${rodLeft - 4}" y="${gantryY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
-  <rect x="${rodRight - 10}" y="${gantryY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
-  ${bedGlow}
-  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
-  <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
-  ${hotendGlow}
-  <g transform="translate(${nozzleXPos}, ${gantryY})"><g>${nozzleAnim}<rect x="-7" y="0" width="14" height="10" rx="2" fill="${accentColor}" opacity="0.9"/><polygon points="-4,10 4,10 0,18" fill="${hotendOn ? '#ff8c00' : accentColor}" opacity="${hotendOn ? '1' : '0.7'}"/></g></g>
+
+  return `<svg viewBox="0 0 250 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Printer">
+  <defs>
+    <radialGradient id="p3g1"><stop offset="0" stop-color="${HOT}" stop-opacity=".55"/><stop offset="1" stop-color="${HOT}" stop-opacity="0"/></radialGradient>
+    <radialGradient id="p3g2"><stop offset="0" stop-color="${BED}" stop-opacity=".38"/><stop offset="1" stop-color="${BED}" stop-opacity="0"/></radialGradient>
+  </defs>
+  ${frame}
+  ${zRods}
+  ${s.bed ? `<ellipse cx="${cx}" cy="${bedTop + 3}" rx="96" ry="15" fill="url(#p3g2)"><animate attributeName="opacity" values=".7;1;.7" dur="2.6s" repeatCount="indefinite"/></ellipse>` : ''}
+  ${obj}
+  <rect x="44" y="${bedTop}" width="162" height="7" rx="3" fill="${BED}" opacity="${s.bed ? 0.9 : 0.55}"/>
+  ${bar}
+  <g transform="translate(${cx} ${nozzleY})"><g class="${s.printing ? 'th-run' : ''}">
+    ${s.hot ? `<ellipse cx="0" cy="4" rx="20" ry="12" fill="url(#p3g1)"/>` : ''}
+    <rect x="-14" y="-31" width="28" height="22" rx="5" fill="#252b36" stroke="${HOT}" stroke-width="1.5"/>
+    <path d="M-4 -9h8l-4 7z" fill="${HOT}"/>
+  </g></g>
 </svg>`;
 }
 
-// CoreXY: gantry fixed at top, bed (with object) moves down
-function svgPrinterCoreXY(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
-  const W = 200, H = 180;
-  const frameColor = 'var(--primary-text-color)';
-  const accentColor = 'var(--mode-color)';
-  const frameLeft = 22, frameRight = 178, frameTop = 15, frameBottom = 160;
-  const gantryY = 38; // fixed at top
-  const bedW = 100;
-  const bedX = (W - bedW) / 2;
-  const bedH = 10;
-  const objMaxH = 75;
-  const objH = Math.max(4, objMaxH * progress);
-  const filled = Math.round(progress * 12);
-  const bedYTop = 55;
-  const bedY = bedYTop + (filled > 0 ? objH * filled / 12 : 0);
-  const objY = bedY - objH;
-  const objW = 56;
-  const objX = W / 2 - objW / 2;
-  const nozzleXPos = 55 + (nozzleX ?? 0.5) * 90;
-  const nozzleYPos = gantryY + 12;
-  const hotendGlow = hotendOn
-    ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
-    : '';
-  const bedGlow = bedOn
-    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
-    : '';
-  const chamberGlow = chamberOn
-    ? `<rect x="${frameLeft - 8}" y="${frameTop - 8}" width="${frameRight - frameLeft + 16}" height="${frameBottom - frameTop + 16}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
-    : '';
-  const nozzleAnim = isPrinting
-    ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;-3,0;0,0" dur="3s" repeatCount="indefinite"/>`
-    : '';
-  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
-  ${chamberGlow}
-  <rect x="${frameLeft}" y="${frameTop}" width="${frameRight - frameLeft}" height="${frameBottom - frameTop}" rx="4" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.35"/>
-  <rect x="${frameLeft - 4}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameRight - 6}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameLeft - 4}" y="${frameBottom - 6}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameRight - 6}" y="${frameBottom - 6}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <line x1="${frameLeft + 8}" y1="${gantryY}" x2="${frameRight - 8}" y2="${gantryY}" stroke="${frameColor}" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
-  <rect x="${nozzleXPos - 12}" y="${gantryY - 7}" width="24" height="14" rx="3" fill="${accentColor}" opacity="0.85"/>
-  <circle cx="${frameLeft + 10}" cy="${gantryY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
-  <circle cx="${frameRight - 10}" cy="${gantryY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
-  <line x1="${bedX + 12}" y1="${bedY + bedH}" x2="${bedX + 12}" y2="${frameBottom}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
-  <line x1="${bedX + bedW - 12}" y1="${bedY + bedH}" x2="${bedX + bedW - 12}" y2="${frameBottom}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
-  ${bedGlow}
-  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
-  <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
-  ${hotendGlow}
-  <g transform="translate(${nozzleXPos}, ${gantryY + 7})"><g>${nozzleAnim}<polygon points="-4,0 4,0 0,10" fill="${hotendOn ? '#ff8c00' : accentColor}" opacity="${hotendOn ? '1' : '0.7'}"/></g></g>
-</svg>`;
-}
-
-// Voron 2.4–style: flying gantry moves up with object
-function svgPrinterCoreXYFlyingGantry(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
-  const W = 200, H = 180;
-  const frameColor = 'var(--primary-text-color)';
-  const accentColor = 'var(--mode-color)';
-  const frameLeft = 22, frameRight = 178, frameTop = 15, frameBottom = 160;
-  const frameW = frameRight - frameLeft;
-  const frameH = frameBottom - frameTop;
-  const bedY = 130;
-  const bedW = 100;
-  const bedX = (W - bedW) / 2;
-  const bedH = 10;
-  const objMaxH = bedY - frameTop - 45;
-  const objH = Math.max(4, objMaxH * progress);
-  const objY = bedY - objH;
-  const filled = Math.round(progress * 12);
-  const lineH = objH / 12;
-  const topOfPrintedY = filled > 0 ? objY + (12 - filled) * lineH : bedY;
-  const nozzleTipOffset = 17;
-  const railY = topOfPrintedY - nozzleTipOffset;
-  const nozzleXPos = 55 + (nozzleX ?? 0.5) * 90;
-  const nozzleYPos = railY + 12;
-  const objW = 56;
-  const objX = W / 2 - objW / 2;
-  const hotendGlow = hotendOn
-    ? `<circle cx="${nozzleXPos}" cy="${nozzleYPos + 4}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
-    : '';
-  const bedGlow = bedOn
-    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
-    : '';
-  const chamberGlow = chamberOn
-    ? `<rect x="${frameLeft - 8}" y="${frameTop - 8}" width="${frameW + 16}" height="${frameH + 16}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
-    : '';
-  const nozzleAnim = isPrinting
-    ? `<animateTransform attributeName="transform" type="translate" values="0,0;3,0;-3,0;0,0" dur="3s" repeatCount="indefinite"/>`
-    : '';
-  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
-  ${chamberGlow}
-  <rect x="${frameLeft}" y="${frameTop}" width="${frameW}" height="${frameH}" rx="4" fill="none" stroke="${frameColor}" stroke-width="2.5" opacity="0.35"/>
-  <rect x="${frameLeft - 4}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameRight - 6}" y="${frameTop - 4}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameLeft - 4}" y="${frameBottom - 6}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <rect x="${frameRight - 6}" y="${frameBottom - 6}" width="10" height="10" rx="2" fill="${accentColor}" opacity="0.6"/>
-  <line x1="${frameLeft + 8}" y1="${railY}" x2="${frameRight - 8}" y2="${railY}" stroke="${frameColor}" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
-  <rect x="${nozzleXPos - 12}" y="${railY - 7}" width="24" height="14" rx="3" fill="${accentColor}" opacity="0.85"/>
-  <circle cx="${frameLeft + 10}" cy="${railY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
-  <circle cx="${frameRight - 10}" cy="${railY}" r="5" fill="none" stroke="${frameColor}" stroke-width="1.5" opacity="0.4"/>
-  <line x1="${frameLeft + 12}" y1="${railY + 20}" x2="${frameLeft + 12}" y2="${bedY + 5}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
-  <line x1="${frameRight - 12}" y1="${railY + 20}" x2="${frameRight - 12}" y2="${bedY + 5}" stroke="${frameColor}" stroke-width="1.5" opacity="0.3" stroke-dasharray="4 3"/>
-  ${bedGlow}
-  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
-  <line x1="${bedX + 8}" y1="${bedY + 3}" x2="${bedX + bedW - 8}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <line x1="${bedX + 8}" y1="${bedY + 6}" x2="${bedX + bedW - 8}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
-  ${hotendGlow}
-  <g transform="translate(${nozzleXPos}, ${railY + 7})"><g>${nozzleAnim}<polygon points="-4,0 4,0 0,10" fill="${hotendOn ? '#ff8c00' : accentColor}" opacity="${hotendOn ? '1' : '0.7'}"/></g></g>
-</svg>`;
-}
-
-function svgPrinterCantilever(progress, hotendOn, bedOn, chamberOn, isPrinting, nozzleX) {
-  const W = 200, H = 180;
-  const frameColor = 'var(--primary-text-color)';
-  const accentColor = 'var(--mode-color)';
-  const uprightX = 35;
-  const uprightTop = 15;
-  const uprightBottom = 160;
-  const baseY = 155;
-  const baseLeft = 20;
-  const baseRight = 175;
-  const bedY = 140;
-  const bedW = 110;
-  const bedX = (W - bedW) / 2;
-  const bedH = 10;
-  const objMaxH = bedY - uprightTop - 36;
-  const objH = Math.max(4, objMaxH * progress);
-  const objY = bedY - objH;
-  const filled = Math.round(progress * 12);
-  const lineH = objH / 12;
-  const topOfPrintedY = filled > 0 ? objY + (12 - filled) * lineH : bedY;
-  const nozzleTipOffset = 23;
-  const armY = topOfPrintedY - nozzleTipOffset;
-  const armRight = baseRight - 5;
-  const nozzleXPos = 70 + (nozzleX ?? 0.5) * 80;
-  const objW = 60;
-  const objX = W / 2 - objW / 2;
-  const hotendGlow = hotendOn
-    ? `<circle cx="${nozzleXPos}" cy="${armY + 16}" r="5" fill="#ff8c00" opacity="0.5"><animate attributeName="opacity" values="0.5;0.9;0.5" dur="2s" repeatCount="indefinite"/></circle>`
-    : '';
-  const bedGlow = bedOn
-    ? `<ellipse cx="${bedX + bedW / 2}" cy="${bedY + bedH / 2}" rx="${bedW / 2 + 4}" ry="8" fill="#ff8c00" opacity="0.35"><animate attributeName="opacity" values="0.35;0.6;0.35" dur="2.5s" repeatCount="indefinite"/></ellipse>`
-    : '';
-  const chamberGlow = chamberOn
-    ? `<rect x="${baseLeft - 8}" y="${uprightTop - 8}" width="${baseRight - baseLeft + 16}" height="${uprightBottom - uprightTop + 20}" rx="8" fill="#ff8c00" opacity="0.08"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>`
-    : '';
-  const nozzleAnim = isPrinting
-    ? `<animateTransform attributeName="transform" type="translate" values="0,0;4,0;0,0;-4,0;0,0" dur="3.5s" repeatCount="indefinite"/>`
-    : '';
-  const objectLines = progress > 0 ? _buildObject(progress, objH, objW - 4) : '';
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;color:${accentColor};overflow:visible">
-  ${chamberGlow}
-  <rect x="${baseLeft}" y="${baseY}" width="${baseRight - baseLeft}" height="12" rx="4" fill="${frameColor}" opacity="0.25"/>
-  <line x1="${baseLeft + 6}" y1="${baseY}" x2="${baseLeft + 6}" y2="${uprightBottom}" stroke="${frameColor}" stroke-width="3" opacity="0.3" stroke-linecap="round"/>
-  <rect x="${uprightX - 5}" y="${uprightTop}" width="12" height="${uprightBottom - uprightTop}" rx="3" fill="${frameColor}" opacity="0.2"/>
-  <line x1="${uprightX}" y1="${uprightTop}" x2="${uprightX}" y2="${uprightBottom}" stroke="${frameColor}" stroke-width="3.5" opacity="0.65" stroke-linecap="round"/>
-  <rect x="${uprightX - 9}" y="${uprightTop - 6}" width="18" height="10" rx="3" fill="${accentColor}" opacity="0.7"/>
-  <rect x="${uprightX - 3}" y="${armY - 6}" width="14" height="12" rx="2" fill="${accentColor}" opacity="0.8"/>
-  <line x1="${uprightX + 6}" y1="${armY}" x2="${armRight}" y2="${armY}" stroke="${frameColor}" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
-  <rect x="${nozzleXPos - 10}" y="${armY - 7}" width="20" height="14" rx="3" fill="${accentColor}" opacity="0.9"/>
-  ${bedGlow}
-  <rect x="${bedX - 4}" y="${bedY}" width="${bedW + 8}" height="${bedH}" rx="3" fill="${frameColor}" opacity="0.25"/>
-  <rect x="${bedX}" y="${bedY}" width="${bedW}" height="${bedH - 2}" rx="2" fill="${bedOn ? '#ff8c00' : accentColor}" opacity="${bedOn ? '0.7' : '0.4'}"/>
-  <line x1="${bedX + 10}" y1="${bedY + 3}" x2="${bedX + bedW - 10}" y2="${bedY + 3}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <line x1="${bedX + 10}" y1="${bedY + 6}" x2="${bedX + bedW - 10}" y2="${bedY + 6}" stroke="${accentColor}" stroke-width="1" opacity="0.4"/>
-  <g transform="translate(${objX}, ${objY})" style="color:${accentColor}">${objectLines}</g>
-  ${hotendGlow}
-  <g transform="translate(${nozzleXPos}, ${armY + 7})"><g>${nozzleAnim}<rect x="-5" y="0" width="10" height="8" rx="1" fill="${accentColor}" opacity="0.9"/><polygon points="-4,8 4,8 0,16" fill="${hotendOn ? '#ff8c00' : accentColor}" opacity="${hotendOn ? '1' : '0.7'}"/></g></g>
-</svg>`;
-}
-
-function renderPrinterSVG(printerType, progress, hotendTarget, bedTarget, chamberTarget, isPrinting, nozzleX) {
-  const isTargetSet = (t) => t != null && !isNaN(Number(t)) && Number(t) > 0;
-  const hotendOn = isTargetSet(hotendTarget);
-  const bedOn = isTargetSet(bedTarget);
-  const chamberOn = isTargetSet(chamberTarget);
-  // Progress: accept 0–100 or 0–1
-  const p = (progress != null && !isNaN(progress) && progress > 0 && progress <= 1)
-    ? Math.min(1, Math.max(0, progress))
-    : Math.min(1, Math.max(0, (progress || 0) / 100));
-  const nx = Math.min(1, Math.max(0, nozzleX ?? 0.5));
-  switch ((printerType || 'i3').toLowerCase()) {
-    case 'corexy': return svgPrinterCoreXY(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
-    case 'corexy-flying-gantry': return svgPrinterCoreXYFlyingGantry(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
-    case 'cantilever': return svgPrinterCantilever(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
-    default: return svgPrinterI3(p, hotendOn, bedOn, chamberOn, isPrinting, nx);
-  }
-}
-
-// ── Progress arc (non-interactive, display-only) ──────────────────────────────
-function progressArcSVG(pct) {
-  const cx = 36, cy = 36, r = 28;
-  const startDeg = 135, sweepTotal = 270;
-  const sweep = sweepTotal * Math.min(1, Math.max(0, pct / 100));
-  const track = arcPath(cx, cy, r, startDeg, sweepTotal);
-  const fill = sweep > 0 ? arcPath(cx, cy, r, startDeg, sweep) : '';
-  return `<svg viewBox="0 0 72 72" width="72" height="72" style="flex-shrink:0">
-    <path d="${track}" fill="none" stroke="var(--divider-color,rgba(255,255,255,.1))" stroke-width="5" stroke-linecap="round"/>
-    ${fill ? `<path d="${fill}" fill="none" stroke="var(--mode-color)" stroke-width="5" stroke-linecap="round"/>` : ''}
-    <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="13" font-family="'Share Tech Mono',monospace" fill="var(--primary-text-color)" font-weight="600">${Math.round(pct || 0)}%</text>
-  </svg>`;
-}
-
-// ── Main Card Class ───────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────────
 class PrinterCard3D extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
     this._hass = null;
     this._config = null;
     this._entities = {};
@@ -559,56 +372,82 @@ class PrinterCard3D extends HTMLElement {
     this._macros = [];
     this._heaters = [];
     this._fans = [];
-    this._openSheet = null;
-    this._confirmEmergency = false;
-    this._confirmTimer = null;
-    this._animFrame = null;
-    this._nozzleX = 0.5;
-    this._nozzleDir = 1;
-    this._animRunning = false;
-    this._camerasOpen = false;
-    this._dragging = false;
-    this._thumbFailed = false;
-    this._thumbLoaded = false;
-    this._lastThumbIdentity = null;
-    this._lastHtml = {};
-    this._lastEntityIds = null;
+    this._serviceButtons = [];
+    this._statusSeen = false;
     this._entityMappings = null;
     this._entityMappingsKey = null;
     this._entityMappingsPromise = null;
-    this._bound_click = this._onClick.bind(this);
-    this._bound_change = this._onChange.bind(this);
-    this._bound_pointerdown = this._onPointerDown.bind(this);
-    this._bound_pointerup = this._onPointerUp.bind(this);
+    this._built = false;
+    this._skeletonFor = null;
+    this._lastHtml = new Map();
+    this._open = {};            // <details> open state by section
+    this._tab = null;           // live view: 'printer' or a camera entity id
+    this._sel = null;           // heater whose target setter is open
+    this._confirm = null;       // armed two-tap action
+    this._confirmTimer = null;
+    this._numPending = {};      // entity_id -> { value, timer } until HA reflects it
+    this._sendTimers = {};
+    this._jogStep = 10;
+    this._dragging = false;
+    this._thumbIdent = null;
+    this._thumbEl = null;
+    this._thumbOk = false;
+    this._dlg = null;           // compact variant: { wrap, card }
+    this._host = null;          // compact card that opened this one as a dialog
+    this._onKey = (ev) => { if (ev.key === 'Escape') this._closeDialog(); };
   }
 
+  static getStubConfig() {
+    return { name: 'Printer', base_entity: 'voron', printer_type: 'corexy' };
+  }
+
+  getCardSize() { return this._config?.variant === 'compact' ? 3 : 10; }
+
   setConfig(config) {
-    if (!config.base_entity) throw new Error('lovelace-3d-printer-card: base_entity is required');
+    if (!config || !config.base_entity) throw new Error('lovelace-3d-printer-card: base_entity is required');
     this._config = config;
-    if (!this.shadowRoot.innerHTML) this._initialRender();
+    if (this._built && this._entityMappings) { this._crawlEntities(); this._render(); }
   }
 
   set hass(hass) {
     const prev = this._hass;
     this._hass = hass;
+    if (this._dlg) this._dlg.card.hass = hass;
     if (!this._config) return;
+
+    for (const [eid, pend] of Object.entries(this._numPending)) {
+      const real = parseFloat(hass.states[eid]?.state);
+      if (Number.isFinite(real) && Math.abs(real - pend.value) < 0.01) {
+        clearTimeout(pend.timer);
+        delete this._numPending[eid];
+      }
+    }
+
     const key = this._resolveEntityMappingsKey();
-    const haveMappings = this._entityMappings && this._entityMappingsKey === key;
-    if (haveMappings) {
-      this._crawlEntities();
-      if (prev && !this._entitiesChanged(prev, hass)) return;
-      this._render(prev);
+    if (!(this._entityMappings && this._entityMappingsKey === key)) {
+      if (!this._entityMappingsPromise || this._entityMappingsKey !== key) {
+        this._entityMappingsKey = key;
+        this._entityMappingsPromise = this._loadEntityMappings(key).then((m) => {
+          this._entityMappings = m;
+          this._crawlEntities();
+          this._render();
+        });
+      }
       return;
     }
-    if (!this._entityMappingsPromise || this._entityMappingsKey !== key) {
-      this._entityMappingsKey = key;
-      this._entityMappingsPromise = this._loadEntityMappings(key);
-    }
-    this._entityMappingsPromise.then((mappings) => {
-      this._entityMappings = mappings;
-      this._crawlEntities();
-      this._render(prev);
-    });
+    this._crawlEntities();
+    this._syncCams();
+    if (prev && this._built && !this._entitiesChanged(prev, hass)) return;
+    this._render();
+  }
+
+  connectedCallback() {
+    if (this._hass && this._entityMappings && !this._built) this._render();
+  }
+
+  disconnectedCallback() {
+    this._closeDialog();
+    clearTimeout(this._confirmTimer);
   }
 
   _resolveEntityMappingsKey() {
@@ -617,8 +456,7 @@ class PrinterCard3D extends HTMLElement {
   }
 
   _loadEntityMappings(key) {
-    const base = new URL('./entities/', import.meta.url).href;
-    const url = base + key + '.js';
+    const url = new URL(`./entities/${key}.js`, import.meta.url).href;
     return import(/* webpackIgnore: true */ url)
       .then((m) => m.default)
       .catch(() => this._loadEntityMappingsFallback(key));
@@ -627,13 +465,10 @@ class PrinterCard3D extends HTMLElement {
   _loadEntityMappingsFallback(key) {
     const lang = key.split('_')[0];
     const enUrl = new URL('./entities/en_generic.js', import.meta.url).href;
-    if (lang === 'en') {
-      return import(/* webpackIgnore: true */ enUrl).then((m) => m.default).catch(() => DEFAULT_MAPPINGS);
-    }
+    const en = () => import(/* webpackIgnore: true */ enUrl).then((m) => m.default).catch(() => DEFAULT_MAPPINGS);
+    if (lang === 'en') return en();
     const langUrl = new URL(`./entities/${lang}_generic.js`, import.meta.url).href;
-    return import(/* webpackIgnore: true */ langUrl)
-      .then((m) => m.default)
-      .catch(() => import(/* webpackIgnore: true */ enUrl).then((m) => m.default).catch(() => DEFAULT_MAPPINGS));
+    return import(/* webpackIgnore: true */ langUrl).then((m) => m.default).catch(en);
   }
 
   _t(key) {
@@ -641,69 +476,52 @@ class PrinterCard3D extends HTMLElement {
   }
 
   // ── Entity crawler ──────────────────────────────────────────────────────────
-  // Single pass over all hass.states entries that include the base prefix.
-  // Classifies each into a well-known role or a dynamic bucket (macros/heaters/fans/cameras).
-
+  // One pass over the entities containing base_entity, classifying each into a
+  // well-known role or a dynamic bucket (macros, heaters, fans, cameras).
   _crawlEntities() {
     if (!this._hass || !this._config) return;
     const b = this._config.base_entity;
 
-    // Label helper: use friendly_name, strip device prefix + temperature suffixes
-    const devicePrefix = new RegExp(`^(${this._config.name || b})\\s+`, 'i');
+    // Friendly names start with the device name: the card's name or base_entity in words.
+    const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const names = [this._config.name, b.replace(/_/g, ' '), b].filter(Boolean).map(reEsc);
+    const devicePrefix = new RegExp(`^(${names.join('|')})\\s+`, 'i');
     const label = (st, id) => {
       const fn = st.attributes?.friendly_name;
-      if (fn) {
-        return fn
-          .replace(devicePrefix, '')
-          .replace(/\s+temperature$/i, '')
-          .replace(/\s+temp$/i, '')
-          .trim();
-      }
+      if (fn) return fn.replace(devicePrefix, '').replace(/\s+temperature$/i, '').replace(/\s+temp$/i, '').trim();
       return id.replace(/^[^.]+\./, '').replace(new RegExp(`^${b}_`), '').replace(/_/g, ' ').trim();
     };
 
     const m = this._entityMappings || DEFAULT_MAPPINGS;
-    const buildRoleTable = (arr) => (arr || []).map(([role, patterns]) => [patterns, role]);
-    const SENSOR_ROLES = buildRoleTable(m.sensor);
-    const NUMBER_ROLES = buildRoleTable(m.number);
-    const BUTTON_ROLES = buildRoleTable(m.button);
-    const CAMERA_ROLES = buildRoleTable(m.camera);
-
-    const matchRole = (suffix, roleTable) => {
-      for (const [patterns, role] of roleTable) {
-        for (const p of patterns) {
-          if (suffix === p || suffix.endsWith('_' + p)) return role;
-        }
-      }
+    const table = (arr) => (arr || []).map(([role, patterns]) => [patterns, role]);
+    const SENSOR_ROLES = table(m.sensor);
+    const NUMBER_ROLES = table(m.number);
+    const BUTTON_ROLES = table(m.button);
+    const CAMERA_ROLES = table(m.camera);
+    const matchRole = (suffix, roles) => {
+      for (const [patterns, role] of roles) for (const p of patterns) if (suffix === p || suffix.endsWith('_' + p)) return role;
       return null;
     };
 
-    // Reset all dynamic buckets
     this._entities = {};
     this._macros = [];
     this._heaters = [];
     this._fans = [];
     this._serviceButtons = [];
-    // cameras populated separately below (preserve rotation config)
-
-    const tempTargetIds = new Set(); // number entities claimed as temp targets
-
-    // Two-pass: first pass claims well-known roles and macros/cameras/thumbnail.
-    // Second pass handles remaining temp sensors and fans (need to know claimed targets).
-    const remainingSensors = []; // [id, st, suffix] for unclaimed temp sensors
+    this._statusSeen = false;
+    const tempTargetIds = new Set();
+    const remainingSensors = [];
 
     for (const [id, st] of Object.entries(this._hass.states)) {
       if (!id.includes(b)) continue;
-      // Skip hidden entities
       if (st.attributes?.hidden === true) continue;
-
       const domain = id.split('.')[0];
       const suffix = id.replace(/^[^.]+\./, '').replace(new RegExp(`^${b}_`), '');
 
       if (domain === 'sensor') {
         const role = matchRole(suffix, SENSOR_ROLES);
         if (role) {
-          // Prefer a valid-state entity over an unknown/unavailable one
+          if (role === 'status' || role === 'printer_state') this._statusSeen = true;
           const existing = this._entities[role];
           const isNewGood = st.state !== 'unknown' && st.state !== 'unavailable';
           if (!existing) {
@@ -711,1233 +529,1026 @@ class PrinterCard3D extends HTMLElement {
           } else {
             const existingSt = this._hass.states[existing];
             const isExistingBad = !existingSt || existingSt.state === 'unknown' || existingSt.state === 'unavailable';
-            // Prefer canonical temp sensors over short aliases (extruder_temperature > extruder_temp, bed_temperature > bed_temp)
             const preferNew = (role === 'hotend' && id.includes('extruder_temperature') && existing.includes('extruder_temp'))
               || (role === 'bed' && id.includes('bed_temperature') && existing.includes('bed_temp'))
               || (role === 'eta' && id.includes('print_time_left') && existing.includes('print_eta'));
             if ((isExistingBad && isNewGood) || preferNew) this._entities[role] = id;
           }
         } else {
-          // Collect unclaimed temp sensors for second pass
           const unit = st.attributes?.unit_of_measurement;
           if (unit === '°C' || unit === '°F') remainingSensors.push([id, st, suffix]);
         }
-
       } else if (domain === 'number') {
         const role = matchRole(suffix, NUMBER_ROLES);
-        if (role) {
-          if (!this._entities[role]) this._entities[role] = id;
-        }
-        // Fans/outputs handled in second pass
-
+        if (role && !this._entities[role]) this._entities[role] = id;
       } else if (domain === 'button') {
-        // System/action buttons — well-known roles first
         const role = matchRole(suffix, BUTTON_ROLES);
         if (role) {
           if (!this._entities[role]) this._entities[role] = id;
         } else if (suffix.includes('macro_')) {
-          // Macro buttons
-          const macroLabel = label(st, id)
-            .replace(/^macro\s+/i, '')
-            .trim();
-          this._macros.push({ entity_id: id, label: macroLabel });
+          this._macros.push({ entity_id: id, label: label(st, id).replace(/^macro\s+/i, '').trim() });
         } else if (suffix.startsWith('restart_') || suffix.startsWith('stop_') || suffix.startsWith('start_')) {
-          // Service control buttons (restart_klipper, restart_moonraker, restart_crowsnest, etc.)
           this._serviceButtons.push({ entity_id: id, label: label(st, id) });
         }
-
       } else if (domain === 'camera') {
         const role = matchRole(suffix, CAMERA_ROLES);
         if (role === 'thumbnail' && !this._entities.thumbnail) this._entities.thumbnail = id;
-        // Live cameras handled below
       }
     }
+    this._macros.sort((x, y) => x.label.localeCompare(y.label));
+    this._serviceButtons.sort((x, y) => x.label.localeCompare(y.label));
 
-    // Sort macros by label
-    this._macros.sort((a, b) => a.label.localeCompare(b.label));
-    this._serviceButtons.sort((a, b) => a.label.localeCompare(b.label));
-
-    // Core temp entity IDs (already in stats bar — exclude from misc heaters list)
     const coreTemps = new Set([this._entities.hotend, this._entities.bed].filter(Boolean));
     const coreTargets = new Set([this._entities.hotend_target, this._entities.bed_target].filter(Boolean));
-
-    // Second pass: unclaimed temp sensors → heaters list
-    for (const [sensorId, st, suffix] of remainingSensors) {
+    for (const [sensorId, st] of remainingSensors) {
       if (coreTemps.has(sensorId)) continue;
-
-      const targetId = sensorId
-        .replace(/^sensor\./, 'number.')
-        .replace(/_temperature$/, '_target')
-        .replace(/_temp$/, '_target');
-
-      if (coreTargets.has(targetId)) continue; // alias of hotend/bed
-
+      const targetId = sensorId.replace(/^sensor\./, 'number.').replace(/_temperature$/, '_target').replace(/_temp$/, '_target');
+      if (coreTargets.has(targetId)) continue;
       const targetSt = this._hass.states[targetId];
-      const lbl = label(st, sensorId);
-
+      const cur = parseFloat(st.state);
       if (targetSt) {
         tempTargetIds.add(targetId);
-        this._heaters.push({
-          entity_id: sensorId,
-          label: lbl,
-          current: parseFloat(st.state) || null,
-          target: parseFloat(targetSt.state) || null,
-          min_temp: parseFloat(targetSt.attributes?.min ?? 0),
-          max_temp: parseFloat(targetSt.attributes?.max ?? 300),
-          target_entity: targetId,
-          readonly: false,
-        });
+        const tgt = parseFloat(targetSt.state);
+        this._heaters.push({ entity_id: sensorId, label: label(st, sensorId), current: isNaN(cur) ? null : cur, target: isNaN(tgt) ? null : tgt, target_entity: targetId, readonly: false });
       } else {
-        this._heaters.push({
-          entity_id: sensorId,
-          label: lbl,
-          current: parseFloat(st.state) || null,
-          target: null,
-          min_temp: null,
-          max_temp: null,
-          target_entity: null,
-          readonly: true,
-        });
+        this._heaters.push({ entity_id: sensorId, label: label(st, sensorId), current: isNaN(cur) ? null : cur, target: null, target_entity: null, readonly: true });
       }
     }
+    // Settable heaters first, then read-only sensors.
+    this._heaters.sort((x, y) => Number(x.readonly) - Number(y.readonly));
 
-    // Fans/outputs: number entities matching fan/filter/exhaust/output_pin patterns,
-    // not already claimed as a well-known role or temp target
-    const claimedNumbers = new Set(Object.values(this._entities).filter(id => id?.startsWith('number.')));
-    const fanPattern = /fan|filter|exhaust|output_pin/i;
+    const claimed = new Set(Object.values(this._entities).filter((id) => id?.startsWith('number.')));
+    const fanPattern = /fan|filter|exhaust|output_pin|light|led/i;
     for (const [id, st] of Object.entries(this._hass.states)) {
       if (!id.startsWith('number.') || !id.includes(b)) continue;
       if (st.attributes?.hidden === true) continue;
-      if (claimedNumbers.has(id) || tempTargetIds.has(id)) continue;
-      if (!fanPattern.test(id)) continue;
+      if (claimed.has(id) || tempTargetIds.has(id) || !fanPattern.test(id)) continue;
+      const v = parseFloat(st.state);
       this._fans.push({
         entity_id: id,
         label: label(st, id),
-        value: (st.state === 'unknown' || st.state === 'unavailable') ? 0 : (parseFloat(st.state) || 0),
+        value: isNaN(v) ? 0 : v,
+        unavailable: st.state === 'unavailable' || st.state === 'unknown',
         min: parseFloat(st.attributes?.min ?? 0),
         max: parseFloat(st.attributes?.max ?? 100),
         step: parseFloat(st.attributes?.step ?? 1),
-        unit: st.attributes?.unit_of_measurement || '%',
+        unit: st.attributes?.unit_of_measurement || '',
       });
     }
 
-    // Live cameras: auto-discover from hass.states, merge rotation from config
-    const rotationConfig = {};
+    // Fans first, then lights and other outputs.
+    const isLight = (id) => /light|led|output_pin/i.test(id);
+    this._fans.sort((x, y) => Number(isLight(x.entity_id)) - Number(isLight(y.entity_id)));
+
+    const rotation = {};
     for (const c of (this._config.cameras || [])) {
-      const entry = typeof c === 'string' ? { entity: c, rotate: 0 } : c;
-      if (entry.entity) rotationConfig[entry.entity] = entry.rotate || 0;
+      const e = typeof c === 'string' ? { entity: c, rotate: 0 } : c;
+      if (e.entity) rotation[e.entity] = e.rotate || 0;
     }
     this._cameras = [];
     for (const [id, st] of Object.entries(this._hass.states)) {
       if (!id.startsWith('camera.') || !id.includes(b)) continue;
-      if (st.attributes?.hidden === true) continue;
-      if (id === this._entities.thumbnail) continue; // already claimed as thumbnail
-      this._cameras.push({
-        entity: id,
-        label: label(st, id),
-        rotate: rotationConfig[id] ?? 0,
-      });
+      if (st.attributes?.hidden === true || id === this._entities.thumbnail) continue;
+      this._cameras.push({ entity: id, label: label(st, id), rotate: rotation[id] ?? 0 });
     }
-    this._cameras.sort((a, b) => a.entity.localeCompare(b.entity));
+    this._cameras.sort((x, y) => x.entity.localeCompare(y.entity));
   }
 
   _entitiesChanged(prev, next) {
-    for (const id of Object.values(this._entities)) {
-      if (!id) continue;
-      if (prev.states[id] !== next.states[id]) return true;
-    }
-    // Track optional power switch
     const ps = this._config?.power_switch;
     if (ps && prev.states[ps] !== next.states[ps]) return true;
-    for (const cam of this._cameras) {
-      if (prev.states[cam.entity] !== next.states[cam.entity]) return true;
-    }
-    // Check macro/heater/fan entities (broad pass on base prefix)
     const b = this._config.base_entity;
+    const thumb = this._entities.thumbnail;
+    const cams = new Set(this._cameras.map((c) => c.entity));
     for (const id of Object.keys(next.states)) {
-      if (id.includes(b) && prev.states[id] !== next.states[id]) return true;
+      // Camera entities change with every token rotation; they're synced separately.
+      if (!id.includes(b) || id === thumb || cams.has(id)) continue;
+      if (prev.states[id] !== next.states[id]) return true;
     }
     return false;
   }
 
-  _getChangedRoles(prev, next) {
-    const changed = new Set();
-    for (const [role, id] of Object.entries(this._entities)) {
-      if (!id) continue;
-      if (role === 'thumbnail') continue; // updates every frame during print; would cause flicker
-      if (prev.states[id] !== next.states[id]) changed.add(role);
-    }
-    const ps = this._config?.power_switch;
-    if (ps && prev.states[ps] !== next.states[ps]) changed.add('power');
-    // Do not track camera entity state changes — they update every frame and would cause flicker
-    const b = this._config.base_entity;
-    for (const id of Object.keys(next.states)) {
-      if (id.includes(b) && prev.states[id] !== next.states[id]) changed.add('base');
-    }
-    return changed;
-  }
-
-  _getSectionsToUpdate(changedRoles) {
-    const sections = new Set();
-    const R = changedRoles;
-    if (R.has('status') || R.has('printer_state') || R.has('power')) sections.add('header');
-    if (R.has('current_print_message') || R.has('current_display_message')) sections.add('msg');
-    if (R.has('progress') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('status') || R.has('power')) sections.add('printer');
-    if (R.has('hotend') || R.has('bed') || R.has('hotend_target') || R.has('bed_target') || R.has('chamber_target') || R.has('speed_factor') || R.has('flow_factor') || R.has('base')) sections.add('stats');
-    if (R.has('progress') || R.has('duration') || R.has('eta') || R.has('current_layer') || R.has('total_layers') || R.has('filament_used') || R.has('filename') || R.has('thumbnail') || R.has('status')) sections.add('tiles');
-    if (R.has('status')) sections.add('controls');
-    if (R.has('camera')) sections.add('cameras');
-    if (R.has('base') || R.has('position_x') || R.has('position_y') || R.has('position_z')) sections.add('sheets');
-    return sections;
-  }
-
-  _entityExists(key) {
-    const id = this._entities[key];
-    if (!id || !this._hass) return false;
-    return !!this._hass.states[id];
-  }
-
+  _exists(key) { const id = this._entities[key]; return !!(id && this._hass?.states[id]); }
   _stVal(key) { return stVal(this._hass, this._entities[key]); }
   _numVal(key) { return numVal(this._hass, this._entities[key]); }
+  _num(eid) {
+    if (eid && this._numPending[eid]) return this._numPending[eid].value;
+    return numVal(this._hass, eid);
+  }
 
-  // Combines printer_state (ready/startup/shutdown/error) with current_print_state (standby/printing/paused/complete/cancelled/error)
+  _powerOn() {
+    const ps = this._config?.power_switch;
+    return ps ? this._hass?.states[ps]?.state === 'on' : null;
+  }
+
+  // Combines the plug, reachability, printer_state (ready/startup/shutdown/error)
+  // and current_print_state (standby/printing/paused/complete/cancelled/error).
   _effectiveStatus() {
+    if (this._powerOn() === false) return 'off';
     const printerState = (this._stVal('printer_state') || '').toLowerCase();
     const printState = (this._stVal('status') || '').toLowerCase();
-    // Power switch off takes top priority
-    const ps = this._config?.power_switch;
-    if (ps && this._hass?.states[ps]?.state === 'off') return 'off';
+    if (!printerState && !printState && this._statusSeen) return 'offline';
     if (printerState === 'error' || printerState === 'shutdown' || printerState === 'startup') return printerState;
     return printState || printerState || 'idle';
   }
 
-  _isPrinting() {
-    const s = this._effectiveStatus();
-    return s === 'printing';
+  _statusLabel(status) {
+    const k = 'st_' + status;
+    const t = this._t(k);
+    return t !== k ? t : status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
   }
 
-  _isPaused() {
-    const s = this._effectiveStatus();
-    return s === 'paused';
-  }
-
-  _isPowerOff() {
-    const printerState = (this._stVal('printer_state') || '').toLowerCase();
-    if (printerState === 'shutdown') return true;
-    const ps = this._config?.power_switch;
-    if (ps && this._hass?.states[ps]?.state === 'off') return true;
-    return false;
-  }
-
-  // ── Animation ───────────────────────────────────────────────────────────────
-
-  _startNozzleAnim() {
-    if (this._animRunning) return;
-    this._animRunning = true;
-    const tick = () => {
-      if (!this._isPrinting()) { this._animRunning = false; return; }
-      this._nozzleX += this._nozzleDir * 0.004;
-      if (this._nozzleX >= 1) { this._nozzleX = 1; this._nozzleDir = -1; }
-      if (this._nozzleX <= 0) { this._nozzleX = 0; this._nozzleDir = 1; }
-      const svgEl = this.shadowRoot.querySelector('.printer-svg-wrap');
-      if (svgEl) {
-        svgEl.innerHTML = renderPrinterSVG(
-          this._config.printer_type,
-          this._numVal('progress') || 0,
-          this._numVal('hotend_target'),
-          this._numVal('bed_target'),
-          this._numVal('chamber_target') ?? this._heaters.find(h => h.entity_id?.toLowerCase().includes('chamber'))?.target ?? null,
-          true,
-          this._nozzleX
-        );
-      }
-      this._animFrame = requestAnimationFrame(tick);
+  // Everything both variants show, read once per render.
+  _readState() {
+    const status = this._effectiveStatus();
+    const printing = status === 'printing';
+    const paused = status === 'paused';
+    const active = printing || paused;
+    const offLike = status === 'off' || status === 'offline';
+    let progress = this._numVal('progress') || 0;
+    if (progress > 0 && progress <= 1 && attrVal(this._hass, this._entities.progress, 'unit_of_measurement') !== '%') progress *= 100;
+    const duration = durationVal(this._hass, this._entities.duration);
+    let eta = durationVal(this._hass, this._entities.eta);
+    if (!eta && duration != null && progress > 0) eta = duration / (progress / 100) - duration;
+    const filRaw = this._numVal('filament_used');
+    const filUnit = attrVal(this._hass, this._entities.filament_used, 'unit_of_measurement');
+    const filament = filRaw != null ? (filUnit === 'm' || filRaw < 100 ? filRaw : filRaw / 1000) : null;
+    const chamber = this._heaters.find((h) => /chamber/i.test(h.entity_id) && !h.readonly) || this._heaters.find((h) => /chamber/i.test(h.entity_id));
+    return {
+      status, printing, paused, active, offLike,
+      label: this._statusLabel(status),
+      color: stateColor(status),
+      progress,
+      duration, eta,
+      filament,
+      filename: this._stVal('filename'),
+      layer: this._numVal('current_layer'),
+      layers: this._numVal('total_layers'),
+      hotend: this._numVal('hotend'),
+      hotendTarget: this._num(this._entities.hotend_target),
+      bed: this._numVal('bed'),
+      bedTarget: this._num(this._entities.bed_target),
+      chamber: chamber?.current ?? null,
+      chamberTarget: this._num(this._entities.chamber_target) ?? (chamber?.target_entity ? this._num(chamber.target_entity) : null),
     };
-    this._animFrame = requestAnimationFrame(tick);
-  }
-
-  _stopNozzleAnim() {
-    this._animRunning = false;
-    if (this._animFrame) { cancelAnimationFrame(this._animFrame); this._animFrame = null; }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
-
-  _initialRender() {
-    this.shadowRoot.innerHTML = `<style>${this._css()}</style><div class="card"></div>`;
-    this.shadowRoot.addEventListener('click', this._bound_click);
-    this.shadowRoot.addEventListener('input', this._bound_change);
-    this.shadowRoot.addEventListener('change', this._bound_change);
-    this.shadowRoot.addEventListener('pointerdown', this._bound_pointerdown);
-    this.shadowRoot.addEventListener('pointerup', this._bound_pointerup);
-    this.shadowRoot.addEventListener('pointercancel', this._bound_pointerup);
-  }
-
-  _onPointerDown(e) {
-    if (e.target && e.target.type === 'range') this._dragging = true;
-  }
-
-  _onPointerUp(e) {
-    if (!this._dragging) return;
-    this._dragging = false;
-    // Commit the slider value to HA on release
-    const el = e.target;
-    if (!el || el.type !== 'range') return;
-    const val = parseFloat(el.value);
-    if (el.dataset.action === 'set-fan') {
-      this._hass.callService('number', 'set_value', { entity_id: el.dataset.entity, value: val });
-    } else if (el.dataset.action === 'mv-speed-factor') {
-      this._setNumber('speed_factor', val);
-    }
-  }
-
-  _render(prevHass) {
-    if (!this._config || !this._hass) return;
+  // The skeleton is built once per variant; each render only replaces regions
+  // whose markup changed, so camera streams, the toolhead animation and open
+  // sections survive state updates. A drag pauses rendering until release.
+  _render() {
+    if (!this._hass || !this._config || !this._entityMappings) return;
+    if (!this._built) this._initShadow();
     if (this._dragging) return;
-    const card = this.shadowRoot.querySelector('.card');
-    if (!card) return;
-
-    this._crawlEntities();
-
-    const status = this._effectiveStatus();
-    const mc = stateColor(status);
-    card.style.setProperty('--mode-color', mc);
-    card.style.setProperty('--chip-bg', hexA(mc, 0.15));
-
-    const entityIds = Object.values(this._entities).filter(Boolean).sort().join(',');
-    const structureChanged = this._lastEntityIds !== null && this._lastEntityIds !== entityIds;
-    let canIncremental = prevHass && !structureChanged && Object.keys(this._lastHtml).length > 0;
-
-    if (canIncremental) {
-      const changedRoles = this._getChangedRoles(prevHass, this._hass);
-      const sectionsToUpdate = this._getSectionsToUpdate(changedRoles);
-      if (!sectionsToUpdate.size) {
-        if (this._isPrinting()) this._startNozzleAnim();
-        else this._stopNozzleAnim();
-        return;
-      }
-      if (sectionsToUpdate.has('cameras')) canIncremental = false;
+    const compact = this._config.variant === 'compact';
+    const variant = compact ? 'compact' : 'full';
+    const root = this.shadowRoot;
+    if (this._skeletonFor !== variant) {
+      root.innerHTML = `<style>${this._css()}</style>${compact ? this._compactSkeleton() : this._fullSkeleton()}`;
+      this._lastHtml = new Map();
+      this._skeletonFor = variant;
     }
-
-    const parts = this._htmlParts();
-
-    if (canIncremental) {
-      const mainEl = card.querySelector('[data-section="main"]');
-      if (mainEl && parts.main !== this._lastHtml.main) {
-        mainEl.innerHTML = parts.main;
-        this._lastHtml.main = parts.main;
-      }
-    } else {
-      card.innerHTML = `<div data-section="main">${parts.main}</div><div data-section="cameras">${parts.cameras}</div>`;
-      this._lastHtml = { main: parts.main, cameras: parts.cameras };
-      this._lastEntityIds = entityIds;
-    }
-
-    if (this._isPrinting()) this._startNozzleAnim();
-    else this._stopNozzleAnim();
-
-    if (this._openSheet) {
-      const sheet = this.shadowRoot.querySelector(`.sheet[data-sheet="${this._openSheet}"]`);
-      const overlay = this.shadowRoot.querySelector('.overlay');
-      if (sheet && overlay) { sheet.classList.add('open'); overlay.classList.add('visible'); }
-    }
-
-    if (this._camerasOpen) {
-      const section = this.shadowRoot.querySelector('.cameras-section');
-      if (section) {
-        section.classList.add('open');
-        this._wireCameraStreams();
-      }
-    }
-
-    const thumbImg = this.shadowRoot.querySelector('.thumb-img');
-    if (thumbImg) {
-      thumbImg.onload = () => {
-        if (this._thumbLoaded) return;
-        this._thumbLoaded = true;
-        this._thumbFailed = false;
-        this._render(this._hass);
-      };
-      thumbImg.onerror = () => {
-        if (this._thumbFailed) return;
-        this._thumbFailed = true;
-        this._thumbLoaded = false;
-        this._render(this._hass);
-      };
+    const parts = compact ? this._compactParts() : this._fullParts();
+    const card = root.getElementById('card');
+    if (card.className !== parts.cls) card.className = parts.cls;
+    card.style.setProperty('--mc', parts.color);
+    for (const [id, html] of Object.entries(parts.regions)) this._setHtml(root.getElementById(id), html);
+    if (!compact) {
+      root.getElementById('hero').style.display = parts.hero ? '' : 'none';
+      this._syncCams();
+      this._placeThumb();
     }
   }
 
-  // ── HTML template ───────────────────────────────────────────────────────────
+  _setHtml(el, html) {
+    if (!el || this._lastHtml.get(el) === html) return;
+    el.innerHTML = html;
+    this._lastHtml.set(el, html);
+  }
 
-  _htmlParts() {
+  _initShadow() {
+    this.attachShadow({ mode: 'open' });
+    const r = this.shadowRoot;
+    r.addEventListener('click', (e) => this._onClick(e));
+    r.addEventListener('pointerdown', (e) => this._onPointerDown(e));
+    // <details> toggles don't bubble; capture them to remember which sections are open.
+    r.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (d instanceof HTMLDetailsElement && d.dataset.sec) this._open[d.dataset.sec] = d.open;
+    }, true);
+    this._built = true;
+    PrinterCard3D._loadFont();
+  }
+
+  static _loadFont() {
+    if (document.getElementById('p3d-inter')) return;
+    const l = document.createElement('link');
+    l.id = 'p3d-inter';
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+    document.head.appendChild(l);
+  }
+
+  _fullSkeleton() {
+    return `<div id="card">
+  <div class="dh" id="r-head"></div>
+  <div id="r-banner"></div>
+  <div class="body">
+    <div class="col c1">
+      <div id="r-off"></div>
+      <div class="hero" id="hero"><div class="view"><div class="draw" id="r-draw"></div><div class="camwrap" id="cams"></div></div><div class="tabs" id="r-tabs"></div></div>
+      <div id="r-prog"></div>
+      <div id="r-acts"></div>
+    </div>
+    <div class="col c2">
+      <div id="r-temps"></div>
+      <div id="r-tune"></div>
+      <div id="r-move"></div>
+      <div id="r-macros"></div>
+      <div id="r-sys"></div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  _compactSkeleton() {
+    return `<div id="card"><div id="g-main"></div><div id="g-bar"></div><div id="g-temps"></div><div id="g-foot"></div></div>`;
+  }
+
+  // ── Full card ───────────────────────────────────────────────────────────────
+  _fullParts() {
+    const s = this._readState();
     const cfg = this._config;
-    const status = this._effectiveStatus();
-    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
-    const progress = this._numVal('progress') || 0;
-    const hotendTemp = this._numVal('hotend');
-    const hotendTarget = this._numVal('hotend_target');
-    const bedTemp = this._numVal('bed');
-    const bedTarget = this._numVal('bed_target');
-    const chamberHeater = this._heaters.find(h => h.entity_id && h.entity_id.toLowerCase().includes('chamber'));
-    const chamberTemp = chamberHeater?.current ?? null;
-    const durationSecs = durationVal(this._hass, this._entities.duration) ?? this._numVal('duration');
-    const currentLayer = this._numVal('current_layer');
-    const totalLayers = this._numVal('total_layers');
-    const filename = this._stVal('filename');
-    const speedFactor = this._numVal('speed_factor');
-    const flowFactor = this._numVal('flow_factor');
-    const filamentRaw = this._numVal('filament_used');
-    const filamentUnit = attrVal(this._hass, this._entities.filament_used, 'unit_of_measurement');
-    const filamentUsed = filamentRaw != null
-      ? (filamentUnit === 'm' || filamentRaw < 100 ? filamentRaw : filamentRaw / 1000)
-      : null;
-    const isPrinting = this._isPrinting();
-    const isPaused = this._isPaused();
-    const isActive = isPrinting || isPaused;
-    const movementDisabled = isPrinting && !isPaused; // disable home/jog when printing (allow when paused)
+    const t = (k) => this._t(k);
+    const name = cfg.name || t('printer');
+    const pct = Math.round(s.progress);
+    const powerId = cfg.power_switch;
+    const powerOn = this._powerOn();
 
-    // Thumbnail: use entity_picture from attributes; fall back to icon on error
-    const thumbEntityId = this._entities.thumbnail;
-    const thumbState = thumbEntityId ? this._hass.states[thumbEntityId] : null;
-    const entityPicture = thumbState?.attributes?.entity_picture || '';
-    const thumbSrc = entityPicture
-      ? (entityPicture.startsWith('http') ? entityPicture : `${location.origin}${entityPicture}`)
+    // Header
+    let sub;
+    if (s.status === 'off') sub = t('powered_off');
+    else if (s.status === 'offline') sub = t('offline');
+    else if (s.active) sub = `${s.label} · ${s.layer != null && s.layers ? `${t('layer')} ${Math.round(s.layer)} / ${Math.round(s.layers)}` : `${pct}%`}`;
+    else sub = [s.label, s.hotend != null ? `${t('hotend')} ${Math.round(s.hotend)}°` : '', s.bed != null ? `${t('bed')} ${Math.round(s.bed)}°` : ''].filter(Boolean).join(' · ');
+    const armedE = this._confirm === 'emergency';
+    const head = `<div class="ic">${ico(s.active ? 'printer3d-nozzle' : 'printer3d', 22)}</div>
+    <div class="tt"><h3>${esc(name)}</h3><p>${esc(sub)}</p></div>
+    <div class="sp"></div>
+    <span class="pill"><i></i>${esc(s.label)}</span>
+    ${this._exists('emergency') && !s.offLike ? `<button class="iconbtn danger ${armedE ? 'armed' : ''}" data-action="emergency" title="${esc(armedE ? t('estop_armed') : t('estop'))}" aria-label="${esc(t('estop'))}">${ico('alert-octagon-outline')}</button>` : ''}
+    ${powerId ? `<button class="power ${powerOn ? '' : 'off'} ${this._confirm === 'power' ? 'armed' : ''}" data-action="toggle-power" title="${esc(this._confirm === 'power' ? t('tap_again') : powerOn ? 'Turn off' : t('turn_on'))}" aria-label="Power">${ico('power', 20)}</button>` : ''}
+    ${cfg._inDialog ? `<button class="iconbtn" data-action="close-dialog" title="Close" aria-label="Close">${ico('close')}</button>` : ''}`;
+
+    // Message banner (Klipper print/display messages)
+    const valid = (v) => v && v.toLowerCase() !== 'none' && isNaN(parseFloat(v));
+    const msgs = [this._stVal('current_print_message'), this._stVal('current_display_message')].filter(valid);
+    const bad = /error|cancel|shutdown/.test(s.status);
+    const banner = msgs.length && !s.offLike
+      ? `<div class="banner ${bad ? 'bad' : ''}">${ico(bad ? 'alert-outline' : 'information-outline')}<span>${esc(msgs.join(' · '))}</span></div>`
       : '';
-    if (!thumbEntityId || !(isPrinting || isPaused)) this._lastThumbIdentity = null;
-    else {
-      // Use entityId only — access_token rotates on entity updates and would cause fallback resets
-      const thumbIdentity = thumbEntityId;
-      if (this._lastThumbIdentity !== thumbIdentity) {
-        this._lastThumbIdentity = thumbIdentity;
-        this._thumbLoaded = false;
-        this._thumbFailed = false;
-      }
-    }
-    const hasThumb = !!(thumbEntityId && (isPrinting || isPaused));
-    const showThumb = hasThumb && this._thumbLoaded && !this._thumbFailed;
 
-    // ETA — prefer parsed print_time_left; fallback to calculated from duration/progress
-    let etaSecs = durationVal(this._hass, this._entities.eta) ?? this._numVal('eta');
-    if (!etaSecs && durationSecs != null && progress > 0) {
-      etaSecs = (durationSecs / (progress / 100)) - durationSecs;
+    // Off / offline block
+    let off = '';
+    if (s.offLike) {
+      const totals = this._totals().map(([k, v]) => `<div class="fact"><span>${esc(t(k))}</span><b>${esc(v)}</b></div>`).join('');
+      off = `<div class="offhero"><div class="offart">${printerSvg(cfg.printer_type, { p: 0 })}</div>
+        <p>${esc(s.status === 'off' ? t('plug_off') : t('offline_msg'))}</p>
+        ${s.status === 'off' && powerId ? `<button class="big go" data-action="toggle-power">${ico('power')}${esc(t('turn_on'))}</button>` : ''}
+        ${totals ? `<div class="facts f3">${totals}</div>` : ''}</div>`;
     }
 
-    const name = cfg.name || 'Printer';
-    const cameras = this._cameras;
-    const camCount = cameras.length;
+    // Live view: the drawing, then one tab per camera. Cameras keep working with the printer off.
+    const tabs = [...(s.offLike ? [] : [{ key: 'printer', label: t('printer'), icon: 'cube-outline' }]),
+      ...this._cameras.map((c, i) => ({ key: c.entity, label: c.label || `${t('camera_fallback')} ${i + 1}`, icon: 'cctv' }))];
+    if (!tabs.some((x) => x.key === this._tab)) this._tab = tabs[0]?.key ?? null;
+    const tabsHtml = tabs.length > 1 || (tabs.length && tabs[0].key !== 'printer')
+      ? tabs.map((x) => `<button class="${x.key === this._tab ? 'on' : ''}" data-action="tab" data-key="${esc(x.key)}">${ico(x.icon, 15)}<span>${esc(x.label)}</span></button>`).join('')
+      : '';
+    const draw = s.offLike ? '' : printerSvg(cfg.printer_type, {
+      p: s.progress / 100, printing: s.printing,
+      hot: s.hotendTarget > 0, bed: s.bedTarget > 0, cham: s.chamberTarget > 0,
+    });
 
-    const hasMacros = this._macros.length > 0;
-    const hasMovement = this._entityExists('home_all') || this._entityExists('home_x') || this._entityExists('position_x');
-    const hasMisc = this._heaters.length > 0 || this._fans.length > 0 || this._entityExists('hotend') || this._entityExists('bed');
-    const hasSystem = this._entityExists('fw_restart') || this._entityExists('host_restart') || this._entityExists('server_restart') || this._entityExists('host_shutdown') || this._entityExists('klipper_restart') || this._serviceButtons.length > 0;
+    // Progress
+    let prog = '';
+    const showProg = s.active || ((s.status === 'complete' || s.status === 'cancelled') && s.filename);
+    if (showProg) {
+      const facts = [];
+      if (s.active && s.eta != null) facts.push([t('left'), fmtSeconds(s.eta)]);
+      if (s.active && s.eta) facts.push([t('done_at'), fmtClock(s.eta, this._hass?.locale)]);
+      if (s.duration != null) facts.push([t('elapsed'), fmtSeconds(s.duration)]);
+      if (s.layer != null && s.layers) facts.push([t('layer'), `${Math.round(s.layer)} / ${Math.round(s.layers)}`]);
+      const file = (s.filename || '').replace(/\.gcode$/i, '');
+      const fsub = s.active ? (s.filament != null ? `${s.filament.toFixed(1)} m ${t('filament_used')}` : s.label) : s.label;
+      prog = `<div class="prog">
+        <div class="top"><div class="thumb">${ico('file-outline', 28)}</div><div class="fn"><b title="${esc(file)}">${esc(file || '—')}</b><small>${esc(fsub)}</small></div><div class="pct">${pct}<sup>%</sup></div></div>
+        <div class="bar"><i style="width:${clamp(s.progress, 0, 100)}%"></i></div>
+        ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div class="fact"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+      </div>`;
+    }
+    this._updateThumb(s);
 
-    // Power switch (optional config entity)
-    const powerEntityId = this._config.power_switch || null;
-    const powerState = powerEntityId ? this._hass.states[powerEntityId] : null;
-    const powerOn = powerState?.state === 'on';
+    // Pause / Resume / Cancel
+    let acts = '';
+    if (s.active) {
+      const btns = [];
+      if (s.printing && this._exists('pause')) btns.push(`<button class="big warn" data-action="pause">${ico('pause')}${esc(t('pause'))}</button>`);
+      if (s.paused && this._exists('resume')) btns.push(`<button class="big go" data-action="resume">${ico('play')}${esc(t('resume'))}</button>`);
+      if (this._exists('cancel')) btns.push(`<button class="big stop ${this._confirm === 'cancel' ? 'armed' : ''}" data-action="cancel">${ico('stop')}${esc(this._confirm === 'cancel' ? t('tap_again') : t('cancel'))}</button>`);
+      if (btns.length) acts = `<div class="btns n${btns.length}">${btns.join('')}</div>`;
+    }
 
-    const layerStr = (currentLayer != null && totalLayers != null)
-      ? `${Math.round(currentLayer)} / ${Math.round(totalLayers)}`
-      : (currentLayer != null ? `Layer ${Math.round(currentLayer)}` : null);
-
-    const hotendStr = hotendTemp != null
-      ? (hotendTarget ? `${Math.round(hotendTemp)}°/${Math.round(hotendTarget)}°` : fmtTemp(hotendTemp))
-      : null;
-    const bedStr = bedTemp != null
-      ? (bedTarget ? `${Math.round(bedTemp)}°/${Math.round(bedTarget)}°` : fmtTemp(bedTemp))
-      : null;
-
-    const hasPause    = this._entityExists('pause');
-    const hasResume   = this._entityExists('resume');
-    const hasCancel   = this._entityExists('cancel');
-    const hasEmergency = this._entityExists('emergency');
-
-    // Message banner — combine current_print_message and current_display_message; hide if both empty
-    const printMsg = this._stVal('current_print_message');
-    const displayMsg = this._stVal('current_display_message');
-    const validMsg = (v) => v && v.toLowerCase() !== 'none' && isNaN(parseFloat(v));
-    const parts = [printMsg, displayMsg].filter(validMsg);
-    const msgText = parts.length > 0 ? parts.join(' · ') : null;
-    const isErrorState = status.toLowerCase().includes('error') || status.toLowerCase().includes('cancel');
-    const msgColor = stateColor(status);
-
-    // Position values for movement sheet and SVG
-    const posX = this._numVal('position_x');
-    const posY = this._numVal('position_y');
-    const posZ = this._numVal('position_z');
-
-    const main = `
-      <!-- Header -->
-      <div class="header">
-        <div class="printer-name">${name}</div>
-        <div class="header-right">
-          ${hasEmergency ? `<button class="power-btn estop-btn ${this._confirmEmergency ? 'estop-confirm' : ''}" data-action="emergency" title="${this._confirmEmergency ? 'Confirm emergency stop?' : 'Emergency Stop'}">${ICON_EMERGENCY}</button>` : ''}
-          ${powerEntityId ? `<button class="power-btn ${powerOn ? 'power-on' : 'power-off'}" data-action="toggle-power" data-entity="${powerEntityId}" title="${powerOn ? 'Turn off printer' : 'Turn on printer'}">${ICON_POWER}</button>` : ''}
-          <div class="state-chip">
-            <span class="state-dot"></span>
-            <span class="state-label">${statusLabel}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Message banner -->
-      ${msgText ? `<div class="msg-banner" style="background:${hexA(msgColor, 0.13)};border-color:${hexA(msgColor, 0.35)}">
-        <span class="msg-icon">${isErrorState ? ICON_EMERGENCY : ICON_INFO}</span>
-        <span class="msg-text">${msgText}</span>
-      </div>` : ''}
-
-      <!-- Printer SVG -->
-      <div class="printer-section">
-        <div class="printer-svg-wrap${this._isPowerOff() ? ' printer-off' : ''}">
-          ${renderPrinterSVG(cfg.printer_type, progress, hotendTarget, bedTarget, this._numVal('chamber_target') ?? chamberHeater?.target ?? null, isPrinting, this._nozzleX)}
-          ${this._isPowerOff() ? `<div class="printer-off-overlay"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.5"><path d="M16.56 5.44l-1.45 1.45A6.97 6.97 0 0 1 17 12a5 5 0 0 1-5 5 5 5 0 0 1-5-5c0-2.04 1.1-3.8 2.71-4.77L8.27 5.79A8.97 8.97 0 0 0 5 12a7 7 0 0 0 7 7 7 7 0 0 0 7-7c0-2.57-1.36-4.81-3.44-6.11zM13 3h-2v10h2V3z"/></svg></div>` : ''}
-        </div>
-      </div>
-
-      <!-- Stats bar -->
-      <div class="stats-bar">
-        ${hotendStr ? `<div class="stat-item">
-          <span class="stat-icon">${ICON_HOTEND}</span>
-          <span class="stat-val hotend-val">${hotendStr}</span>
-          <span class="stat-label">${this._t('hotend')}</span>
-        </div>` : ''}
-        ${bedStr ? `<div class="stat-item">
-          <span class="stat-icon">${ICON_BED}</span>
-          <span class="stat-val bed-val">${bedStr}</span>
-          <span class="stat-label">${this._t('bed')}</span>
-        </div>` : ''}
-        ${this._heaters.filter(h => !h.readonly && h.target_entity).map(h => {
-          const cur = h.current != null ? Math.round(h.current) + '°' : '—';
-          const val = h.target != null ? `${cur}/${Math.round(h.target)}°` : cur;
-          return `<div class="stat-item">
-          <span class="stat-icon">${ICON_THERMOMETER}</span>
-          <span class="stat-val" style="color:#a78bfa">${val}</span>
-          <span class="stat-label">${h.label}</span>
-        </div>`;
-        }).join('')}
-        ${speedFactor != null ? `<div class="stat-item">
-          <span class="stat-icon">${ICON_SPEED}</span>
-          <span class="stat-val">${fmtPct(speedFactor)}</span>
-          <span class="stat-label">${this._t('speed')}</span>
-        </div>` : ''}
-        ${flowFactor != null ? `<div class="stat-item">
-          <span class="stat-icon">${ICON_FLOW}</span>
-          <span class="stat-val">${fmtPct(flowFactor)}</span>
-          <span class="stat-label">${this._t('flow')}</span>
-        </div>` : ''}
-      </div>
-
-      <div class="sep"></div>
-
-      <!-- Tile grid -->
-      <div class="tiles">
-        <!-- Progress tile -->
-        <div class="tile tile-progress ${isActive ? '' : 'tile-dim'}">
-          <div class="tile-arc">${progressArcSVG(progress)}</div>
-          <div class="tile-info">
-            <div class="tile-primary">${Math.round(progress)}%</div>
-            ${layerStr ? `<div class="tile-secondary">${layerStr} layers</div>` : ''}
-            ${filamentUsed != null ? `<div class="tile-secondary">${filamentUsed.toFixed(2)}m used</div>` : ''}
-          </div>
-        </div>
-
-        <!-- ETA tile -->
-        <div class="tile ${!isActive ? 'tile-dim' : ''}">
-          <div class="tile-icon">${ICON_ETA}</div>
-          <div class="tile-label">${this._t('eta')}</div>
-          <div class="tile-value">
-            ${etaSecs != null ? `<span class="mono">${fmtSeconds(etaSecs)}</span>` : '<span class="na">—</span>'}
-          </div>
-        </div>
-
-        <!-- Elapsed tile -->
-        <div class="tile ${!isActive ? 'tile-dim' : ''}">
-          <div class="tile-icon">${ICON_ELAPSED}</div>
-          <div class="tile-label">${this._t('elapsed')}</div>
-          <div class="tile-value">
-            ${durationSecs != null ? `<span class="mono">${fmtSeconds(durationSecs)}</span>` : '<span class="na">—</span>'}
-          </div>
-        </div>
-
-        <!-- File tile — with optional thumbnail -->
-        <div class="tile tile-file ${!filename ? 'tile-dim' : ''} ${hasThumb ? 'tile-has-thumb' : ''} ${isActive && showThumb ? 'tile-file-active' : ''}">
-          ${hasThumb ? `<div class="thumb-wrap ${showThumb ? 'thumb-loaded' : ''} ${this._thumbFailed ? 'thumb-failed' : ''}">
-            <img class="thumb-img" src="${thumbSrc}" alt="thumbnail"/>
-            <div class="tile-icon thumb-fallback">${ICON_FILE}</div>
-          </div>` : `<div class="tile-icon">${ICON_FILE}</div>`}
-          <div class="tile-file-info">
-            <div class="tile-label">${this._t('file')}</div>
-            <div class="tile-value tile-filename">
-              ${filename ? `<span class="filename">${truncate(filename, 36)}</span>` : '<span class="na">—</span>'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="sep"></div>
-
-      <!-- Print controls (only when print is running) -->
-      ${isActive && (hasPause || hasResume || hasCancel) ? `<div class="controls controls-print">
-        ${isPrinting && hasPause ? `<button class="ctrl-btn ctrl-pause" data-action="pause">${ICON_PAUSE} ${this._t('pause')}</button>` : ''}
-        ${isPaused && hasResume ? `<button class="ctrl-btn ctrl-resume" data-action="resume">${ICON_PLAY} ${this._t('resume')}</button>` : ''}
-        ${hasCancel ? `<button class="ctrl-btn ctrl-cancel" data-action="cancel">${ICON_STOP} ${this._t('cancel')}</button>` : ''}
-      </div>` : ''}
-
-      <!-- Other controls -->
-      <div class="controls">
-        ${hasMacros ? `<button class="ctrl-btn ctrl-tune" data-action="open-macros">${ICON_MACRO} ${this._t('macros')}</button>` : ''}
-        ${hasMovement ? `<button class="ctrl-btn ctrl-tune" data-action="open-movement">${ICON_MOVE} ${this._t('move')}</button>` : ''}
-        ${hasMisc ? `<button class="ctrl-btn ctrl-tune" data-action="open-misc">${ICON_THERMOMETER} ${this._t('misc')}</button>` : ''}
-        ${hasSystem ? `<button class="ctrl-btn ctrl-system" data-action="open-system">${ICON_MORE} ${this._t('more')}</button>` : ''}
-      </div>
-
-      <!-- Overlay -->
-      <div class="overlay" data-action="close-sheet"></div>
-
-      <!-- Macros sheet -->
-      ${hasMacros ? `<div class="sheet" data-sheet="macros">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MACRO} ${this._t('macros')}</div>
-        <div class="sheet-scroll">
-        <div class="macro-list ${movementDisabled ? 'disabled' : ''}">
-          ${this._macros.map(m => `<button class="macro-btn" data-action="run-macro" data-entity="${m.entity_id}" ${movementDisabled ? 'disabled' : ''}>
-            ${ICON_PLAY} ${m.label}
-          </button>`).join('')}
-        </div>
-        </div>
-      </div>` : ''}
-
-      <!-- Movement sheet -->
-      ${hasMovement ? `<div class="sheet" data-sheet="movement">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MOVE} ${this._t('movement')}</div>
-        <div class="sheet-scroll">
-
-        ${(posX != null || posY != null || posZ != null) ? `<div class="pos-bar ${movementDisabled ? 'disabled' : ''}">
-          ${posX != null ? `<div class="pos-item"><span class="pos-axis pos-x">X</span><span class="pos-val mono">${posX.toFixed(1)}</span></div>` : ''}
-          ${posY != null ? `<div class="pos-item"><span class="pos-axis pos-y">Y</span><span class="pos-val mono">${posY.toFixed(1)}</span></div>` : ''}
-          ${posZ != null ? `<div class="pos-item"><span class="pos-axis pos-z">Z</span><span class="pos-val mono">${posZ.toFixed(1)}</span></div>` : ''}
-        </div>` : ''}
-
-        <div class="home-row ${movementDisabled ? 'disabled' : ''}">
-          ${this._entityExists('home_all') ? `<button class="home-btn" data-action="home-axis" data-axis="all" ${movementDisabled ? 'disabled' : ''}>${ICON_HOME} ${this._t('home_all')}</button>` : ''}
-          ${this._entityExists('home_x') ? `<button class="home-btn home-x" data-action="home-axis" data-axis="x" ${movementDisabled ? 'disabled' : ''}>X</button>` : ''}
-          ${this._entityExists('home_y') ? `<button class="home-btn home-y" data-action="home-axis" data-axis="y" ${movementDisabled ? 'disabled' : ''}>Y</button>` : ''}
-          ${this._entityExists('home_z') ? `<button class="home-btn home-z" data-action="home-axis" data-axis="z" ${movementDisabled ? 'disabled' : ''}>Z</button>` : ''}
-        </div>
-
-        <div class="jog-section ${movementDisabled ? 'disabled' : ''}">
-          <!-- XY jog cross -->
-          <div class="jog-xy">
-            <div class="jog-xy-top">
-              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
-            </div>
-            <div class="jog-xy-mid">
-              ${[100,10,1].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
-              <div class="jog-center">${ICON_MOVE}</div>
-              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="x" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
-            </div>
-            <div class="jog-xy-bot">
-              ${[1,10,100].map(d => `<button class="jog-btn" data-action="jog" data-axis="y" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
-            </div>
-          </div>
-
-          <!-- Z jog column -->
-          <div class="jog-z">
-            <div class="jog-z-label pos-z">Z</div>
-            ${[10,1,0.1].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="${d}" ${movementDisabled ? 'disabled' : ''}>+${d}</button>`).join('')}
-            <div class="jog-z-sep"></div>
-            ${[0.1,1,10].map(d => `<button class="jog-btn jog-z-btn" data-action="jog" data-axis="z" data-dist="-${d}" ${movementDisabled ? 'disabled' : ''}>-${d}</button>`).join('')}
-          </div>
-        </div>
-
-        ${this._entityExists('speed_factor') ? `<div class="tune-row" style="margin-top:12px">
-          <div class="tune-row-header">
-            <span class="tune-row-label">${ICON_SPEED} ${this._t('speed')}</span>
-            <span class="tune-row-val mono" id="mv-speed-val">${fmtPct(speedFactor)}</span>
-          </div>
-          <input type="range" class="tune-slider" data-action="mv-speed-factor" min="10" max="200" step="1" value="${Math.round(speedFactor || 100)}"/>
-        </div>` : ''}
-        </div>
-      </div>` : ''}
-
-      <!-- Misc sheet (heaters + fans) -->
-      ${hasMisc ? `<div class="sheet" data-sheet="misc">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_THERMOMETER} ${this._t('misc')}</div>
-        <div class="sheet-scroll">
-        <div class="temps-body">
-
-          ${(this._heaters.length > 0 || this._entityExists('hotend') || this._entityExists('bed')) ? `
-          <div class="temps-section-label">${this._t('temperatures')}</div>
-          ${this._entityExists('hotend') ? `<div class="temp-row">
-            <div class="temp-row-info"><span class="temp-row-name">${this._t('hotend')}</span></div>
-            <div class="temp-row-ctrl">
-              <span class="temp-current mono">${hotendTemp != null ? hotendTemp.toFixed(1) + '°' : '—'}</span>
-              ${this._entityExists('hotend_target') ? `
-              <span class="temp-arrow">→</span>
-              <input type="number" class="temp-input"
-                data-action="set-temp"
-                data-entity="${this._entities.hotend}"
-                data-target-entity="${this._entities.hotend_target}"
-                min="0" max="300" step="1"
-                value="${hotendTarget != null ? Math.round(hotendTarget) : 0}"
-              />
-              <span class="temp-unit">°C</span>` : ''}
-            </div>
-          </div>` : ''}
-          ${this._entityExists('bed') ? `<div class="temp-row">
-            <div class="temp-row-info"><span class="temp-row-name">${this._t('bed')}</span></div>
-            <div class="temp-row-ctrl">
-              <span class="temp-current mono">${bedTemp != null ? bedTemp.toFixed(1) + '°' : '—'}</span>
-              ${this._entityExists('bed_target') ? `
-              <span class="temp-arrow">→</span>
-              <input type="number" class="temp-input"
-                data-action="set-temp"
-                data-entity="${this._entities.bed}"
-                data-target-entity="${this._entities.bed_target}"
-                min="0" max="150" step="1"
-                value="${bedTarget != null ? Math.round(bedTarget) : 0}"
-              />
-              <span class="temp-unit">°C</span>` : ''}
-            </div>
-          </div>` : ''}
-          ${this._heaters.map(h => `<div class="temp-row">
-            <div class="temp-row-info">
-              <span class="temp-row-name">${h.label}</span>
-              ${h.state != null ? `<span class="temp-row-state ${h.state !== 'off' ? 'temp-state-active' : ''}">${h.state}</span>` : ''}
-            </div>
-            <div class="temp-row-ctrl">
-              <span class="temp-current mono">${h.current != null ? h.current.toFixed(1) + '°' : '—'}</span>
-              ${h.readonly ? '' : `
-              <span class="temp-arrow">→</span>
-              <input type="number" class="temp-input"
-                data-action="set-temp"
-                data-entity="${h.entity_id}"
-                data-target-entity="${h.target_entity || ''}"
-                min="${h.min_temp}" max="${h.max_temp}" step="1"
-                value="${h.target != null ? Math.round(h.target) : 0}"
-              />
-              <span class="temp-unit">°C</span>`}
-            </div>
-          </div>`).join('')}` : ''}
-
-          ${this._fans.length > 0 ? `
-          <div class="temps-section-label" style="margin-top:${this._heaters.length > 0 ? '14px' : '0'}">${this._t('fans_outputs')}</div>
-          ${this._fans.map(f => `<div class="fan-row">
-            <div class="fan-row-info">
-              <span class="fan-name">${f.label}</span>
-              <span class="fan-val mono" id="fan-val-${f.entity_id.replace(/\./g, '-')}">${f.value}${f.unit}</span>
-            </div>
-            <input type="range" class="tune-slider"
-              data-action="set-fan"
-              data-entity="${f.entity_id}"
-              data-display="fan-val-${f.entity_id.replace(/\./g, '-')}"
-              data-unit="${f.unit}"
-              min="${f.min}" max="${f.max}" step="${f.step}"
-              value="${f.value}"
-            />
-          </div>`).join('')}` : ''}
-
-        </div>
-        </div>
-        </div>` : ''}
-
-      <!-- System sheet -->
-      ${hasSystem ? `<div class="sheet" data-sheet="system">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">${ICON_MORE} ${this._t('system')}</div>
-        <div class="sheet-scroll">
-        <div class="system-body">
-
-          ${(this._entityExists('fw_restart') || this._entityExists('klipper_restart')) ? `
-          <div class="sys-section-label">${this._t('klipper_control')}</div>
-          ${this._entityExists('klipper_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.klipper_restart}">${ICON_RESTART} ${this._t('restart_klipper')}</button>` : ''}
-          ${this._entityExists('fw_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.fw_restart}">${ICON_RESTART} ${this._t('firmware_restart')}</button>` : ''}
-          ` : ''}
-
-          ${this._serviceButtons.length > 0 ? `
-          <div class="sys-section-label">${this._t('service_control')}</div>
-          ${this._serviceButtons.map(b => `<button class="system-btn system-btn-service" data-action="system-action" data-entity="${b.entity_id}">${ICON_RESTART} ${b.label}</button>`).join('')}
-          ` : ''}
-
-          ${(this._entityExists('host_restart') || this._entityExists('host_shutdown') || this._entityExists('server_restart')) ? `
-          <div class="sys-section-label">${this._t('host_control')}</div>
-          ${this._entityExists('server_restart') ? `<button class="system-btn" data-action="system-action" data-entity="${this._entities.server_restart}">${ICON_RESTART} ${this._t('server_restart')}</button>` : ''}
-          ${this._entityExists('host_restart') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_restart}">${ICON_EMERGENCY} ${this._t('reboot_host')}</button>` : ''}
-          ${this._entityExists('host_shutdown') ? `<button class="system-btn system-btn-danger" data-action="system-action" data-entity="${this._entities.host_shutdown}">${ICON_EMERGENCY} ${this._t('shutdown_host')}</button>` : ''}
-          ` : ''}
-
-        </div>
-        </div>
-      </div>` : ''}
-    `;
-
-    const camerasHtml = camCount > 0 ? `<button class="camera-btn ${this._camerasOpen ? 'active' : ''}" data-action="toggle-cameras">
-        ${ICON_CAMERA}
-        <span>${this._t('cameras')}</span>
-        <span class="cam-badge">${camCount}</span>
-        <span class="cam-chevron ${this._camerasOpen ? 'open' : ''}">${ICON_CHEVRON}</span>
-      </button>
-      <div class="cameras-section">
-        <div class="camera-views">
-          ${cameras.map((cam, i) => `<div class="cam-view">
-            <div class="cam-label">${cam.label || `${this._t('camera_fallback')} ${i + 1}`}</div>
-            <div class="cam-stream-wrap" style="--cam-rotate:${cam.rotate}deg">
-              <ha-camera-stream class="cam-stream" data-cam-idx="${i}" allow-exoplayer muted></ha-camera-stream>
-            </div>
-          </div>`).join('')}
-        </div>
-      </div>` : '';
-
-    return { main, cameras: camerasHtml };
+    const regions = {
+      'r-head': head, 'r-banner': banner, 'r-off': off, 'r-draw': draw, 'r-tabs': tabsHtml,
+      'r-prog': prog, 'r-acts': acts,
+      'r-temps': s.offLike ? '' : this._tempsHtml(s),
+      'r-tune': s.offLike ? '' : this._tuneHtml(),
+      'r-move': s.offLike ? '' : this._moveHtml(s),
+      'r-macros': s.offLike ? '' : this._macrosHtml(s),
+      'r-sys': s.status === 'off' ? '' : this._sysHtml(),
+    };
+    return {
+      cls: `card st-${s.status}${s.offLike ? ' is-off' : ''}`,
+      color: s.color,
+      hero: tabs.length > 0,
+      regions,
+    };
   }
 
-  // ── Event handlers ──────────────────────────────────────────────────────────
-
-  _onClick(e) {
-    const el = e.composedPath().find(n => n.dataset && n.dataset.action);
-    if (!el) return;
-    const action = el.dataset.action;
-
-    switch (action) {
-      case 'toggle-cameras':  this._toggleCameras(); break;
-      case 'toggle-power': {
-        const pId = el.dataset.entity;
-        if (pId) this._hass.callService('switch', 'toggle', { entity_id: pId });
-        break;
-      }
-      case 'open-macros':     this._openSheetPanel('macros'); break;
-      case 'open-movement':   this._openSheetPanel('movement'); break;
-      case 'open-misc':       this._openSheetPanel('misc'); break;
-      case 'open-system':     this._openSheetPanel('system'); break;
-      case 'close-sheet':     this._closeSheet(); break;
-      case 'pause':           this._pressButton('pause'); break;
-      case 'resume':          this._pressButton('resume'); break;
-      case 'cancel':          this._pressButton('cancel'); break;
-      case 'emergency':       this._handleEmergency(); break;
-      case 'run-macro':       this._runMacro(el.dataset.entity); break;
-      case 'home-axis':       this._homeAxis(el.dataset.axis); break;
-      case 'jog':             this._jog(el.dataset.axis, parseFloat(el.dataset.dist)); break;
-      case 'system-action':   this._pressEntityButton(el.dataset.entity); break;
+  _totals() {
+    const b = this._config.base_entity;
+    const out = [];
+    const jobs = numVal(this._hass, `sensor.${b}_totals_jobs`);
+    if (jobs != null) out.push(['prints', Math.round(jobs).toLocaleString()]);
+    const timeId = `sensor.${b}_totals_print_time`;
+    const secs = durationVal(this._hass, timeId);
+    if (secs != null) out.push(['print_time', `${Math.round(secs / 3600).toLocaleString()} h`]);
+    const fil = numVal(this._hass, `sensor.${b}_totals_filament_used`);
+    if (fil != null) {
+      const unit = attrVal(this._hass, `sensor.${b}_totals_filament_used`, 'unit_of_measurement');
+      const m = unit === 'mm' ? fil / 1000 : fil;
+      out.push(['filament', m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`]);
     }
+    return out;
   }
 
-  _onChange(e) {
-    const el = e.target;
-    if (!el.dataset.action) return;
-    const val = parseFloat(el.value);
-
-    switch (el.dataset.action) {
-      case 'mv-speed-factor': {
-        const d = this.shadowRoot.querySelector('#mv-speed-val');
-        if (d) d.textContent = `${val}%`;
-        break;
-      }
-      case 'set-fan': {
-        // Only update the display label during drag; service call fires on pointerup
-        const displayId = el.dataset.display;
-        const unit = el.dataset.unit || '%';
-        const d = this.shadowRoot.querySelector(`#${displayId}`);
-        if (d) d.textContent = `${val}${unit}`;
-        break;
-      }
-      case 'set-temp': {
-        if (e.type === 'change') {
-          const targetEntity = el.dataset.targetEntity;
-          if (targetEntity) {
-            // sensor + number pair — set via number.set_value on the target entity
-            this._hass.callService('number', 'set_value', { entity_id: targetEntity, value: val });
-          } else {
-            // climate entity — set via climate.set_temperature
-            this._hass.callService('climate', 'set_temperature', {
-              entity_id: el.dataset.entity,
-              temperature: val,
-            });
-          }
-        }
-        break;
-      }
-    }
-  }
-
-  // ── Sheet management ────────────────────────────────────────────────────────
-
-  _openSheetPanel(name) {
-    this._openSheet = name;
-    const sheet = this.shadowRoot.querySelector(`.sheet[data-sheet="${name}"]`);
-    const overlay = this.shadowRoot.querySelector('.overlay');
-    if (sheet) sheet.classList.add('open');
-    if (overlay) overlay.classList.add('visible');
-    if (sheet) {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const card = this.shadowRoot.querySelector('.card');
-          if (!card) return;
-          const cardRect = card.getBoundingClientRect();
-          if (cardRect.bottom > window.innerHeight) {
-            this.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }
-        }, 50);
+  // Heater tiles. Tapping a settable one opens its target setter below its row.
+  _heaterList(s) {
+    const list = [];
+    if (this._exists('hotend')) list.push({ key: 'hotend', label: this._t('hotend'), icon: 'printer3d-nozzle-heat', color: 'var(--hot)', cur: s.hotend, targetId: this._entities.hotend_target, maxDef: 300 });
+    if (this._exists('bed')) list.push({ key: 'bed', label: this._t('bed'), icon: 'radiator', color: 'var(--bed)', cur: s.bed, targetId: this._entities.bed_target, maxDef: 120 });
+    for (const h of this._heaters) {
+      const cham = /chamber/i.test(h.entity_id);
+      list.push({
+        key: h.entity_id, label: h.label,
+        icon: h.readonly ? 'chip' : cham ? 'heat-wave' : 'thermometer',
+        color: h.readonly ? 'var(--text3)' : cham ? 'var(--cham)' : 'var(--amber)',
+        cur: h.current, targetId: h.target_entity, maxDef: 100,
       });
     }
+    return list;
   }
 
-  _closeSheet() {
-    this._openSheet = null;
-    this.shadowRoot.querySelectorAll('.sheet').forEach(s => s.classList.remove('open'));
-    const overlay = this.shadowRoot.querySelector('.overlay');
-    if (overlay) overlay.classList.remove('visible');
+  _presetsFor(x) {
+    const cfgP = this._config.presets || {};
+    const raw = cfgP[x.key] ?? (x.targetId ? cfgP[x.targetId] : undefined) ?? cfgP[x.label] ?? (x.key === 'hotend'
+      ? [{ name: 'PLA', value: 215 }, { name: 'PETG', value: 245 }, { name: 'ABS', value: 260 }]
+      : x.key === 'bed' ? [{ name: 'PLA', value: 60 }, { name: 'PETG', value: 80 }, { name: 'ABS', value: 100 }] : []);
+    return (Array.isArray(raw) ? raw : []).map((p) => (typeof p === 'number' ? { name: '', value: p } : { name: p.name || '', value: Number(p.value) })).filter((p) => Number.isFinite(p.value));
   }
 
-  _toggleCameras() {
-    this._camerasOpen = !this._camerasOpen;
-    const section = this.shadowRoot.querySelector('.cameras-section');
-    const btn = this.shadowRoot.querySelector('.camera-btn');
-    const chevron = this.shadowRoot.querySelector('.cam-chevron');
-    if (!section) return;
-    if (this._camerasOpen) {
-      section.classList.add('open');
-      btn?.classList.add('active');
-      chevron?.classList.add('open');
-      this._wireCameraStreams();
-    } else {
-      section.classList.remove('open');
-      btn?.classList.remove('active');
-      chevron?.classList.remove('open');
+  _tempsHtml(s) {
+    const list = this._heaterList(s);
+    if (!list.length) return '';
+    const t = (k) => this._t(k);
+    const settable = (x) => !!(x.targetId && this._hass.states[x.targetId] && this._hass.states[x.targetId].state !== 'unavailable');
+    if (this._sel && !list.some((x) => x.key === this._sel && settable(x))) this._sel = null;
+    const tiles = list.map((x) => {
+      const tgt = x.targetId ? this._num(x.targetId) : null;
+      const max = parseFloat(attrVal(this._hass, x.targetId, 'max')) || x.maxDef;
+      const fill = x.cur != null ? clamp(x.cur / max, 0, 1) * 100 : 0;
+      const mark = tgt > 0 ? clamp(tgt / max, 0, 1) * 100 : null;
+      const v = `<span class="v">${x.cur != null ? Math.round(x.cur) + '°' : '—'}${tgt > 0 ? `<small>/ ${Math.round(tgt)}°</small>` : x.targetId ? `<small>${esc(t('off'))}</small>` : ''}</span>`;
+      const inner = `<span class="n">${ico(x.icon, 14)}<span>${esc(x.label)}</span></span>${v}${x.targetId ? `<span class="tb"><i style="width:${fill.toFixed(1)}%"></i>${mark != null ? `<em style="left:${mark.toFixed(1)}%"></em>` : ''}</span>` : ''}`;
+      const cls = `t ${tgt > 0 ? 'heat' : ''} ${this._sel === x.key ? 'sel' : ''} ${x.targetId ? '' : 'ro'}`;
+      return settable(x)
+        ? `<button class="${cls}" style="--tc:${x.color}" data-action="sel-heater" data-key="${esc(x.key)}">${inner}</button>`
+        : `<div class="${cls}" style="--tc:${x.color}">${inner}</div>`;
+    });
+    const idx = list.findIndex((x) => x.key === this._sel);
+    if (idx >= 0) {
+      const x = list[idx];
+      const tgt = this._num(x.targetId) || 0;
+      const presets = this._presetsFor(x);
+      const setter = `<div class="setter"><span class="lbl"><b>${esc(x.label)}</b> ${esc(t('target'))}</span>
+        <button class="step" data-action="heat-step" data-dir="-1" aria-label="-">${ico('minus', 20)}</button><span class="val">${tgt > 0 ? Math.round(tgt) + '°' : esc(t('off'))}</span><button class="step" data-action="heat-step" data-dir="1" aria-label="+">${ico('plus', 20)}</button>
+        <div class="presets"><button class="chip ${tgt <= 0 ? 'on' : ''}" data-action="heat-set" data-val="0">${esc(t('off'))}</button>${presets.map((p) => `<button class="chip ${Math.round(tgt) === Math.round(p.value) ? 'on' : ''}" data-action="heat-set" data-val="${p.value}">${esc(p.name ? `${p.name} ${p.value}` : `${p.value}°`)}</button>`).join('')}</div></div>`;
+      tiles.splice(Math.min(list.length, Math.floor(idx / 3) * 3 + 3), 0, setter);
     }
+    const anySettable = list.some(settable);
+    return `<div class="blk"><div class="bh"><span class="label">${esc(t('temperatures'))}</span>${anySettable ? `<small>${esc(t('tap_heater'))}</small>` : ''}</div><div class="temps">${tiles.join('')}</div></div>`;
   }
 
-  _wireCameraStreams() {
-    this.shadowRoot.querySelectorAll('.cam-stream[data-cam-idx]').forEach(el => {
-      const idx = parseInt(el.dataset.camIdx, 10);
-      const cam = this._cameras[idx];
-      if (!cam || !this._hass) return;
-      const stateObj = this._hass.states[cam.entity];
-      if (!stateObj) return;
-      el.hass = this._hass;
-      el.stateObj = stateObj;
+  // Speed/flow sliders and 10-bar fan/output controls. Shown as a block when
+  // wide; folded into a section on a narrow card.
+  _tuneItems() {
+    const items = [];
+    const track = (key, lbl, defMin, defMax) => {
+      const id = this._entities[key];
+      if (!id || !this._hass.states[id]) return;
+      const v = this._num(id);
+      const min = parseFloat(attrVal(this._hass, id, 'min')) || defMin;
+      const max = parseFloat(attrVal(this._hass, id, 'max')) || defMax;
+      const step = parseFloat(attrVal(this._hass, id, 'step')) || 1;
+      const f = v != null ? clamp((v - min) / (max - min), 0, 1) * 100 : 0;
+      const mid = clamp((100 - min) / (max - min), 0, 1) * 100;
+      items.push(`<div class="sl" style="--sc:var(--blue)"><div class="h"><span>${esc(lbl)}</span><b class="dv">${v != null ? Math.round(v) + '%' : '—'}</b></div>
+        <div class="track ${v == null ? 'dis' : ''}" data-drag="track" data-entity="${id}" data-min="${min}" data-max="${max}" data-step="${step}" data-unit="%"><i style="width:${f.toFixed(1)}%"></i><span class="mid" style="left:${mid.toFixed(1)}%"></span></div></div>`);
+    };
+    track('speed_factor', this._t('speed'), 10, 200);
+    track('flow_factor', this._t('flow'), 50, 150);
+    for (const fan of this._fans) {
+      const v = this._num(fan.entity_id) ?? fan.value;
+      const f = fan.max > fan.min ? clamp((v - fan.min) / (fan.max - fan.min), 0, 1) : 0;
+      const lit = Math.round(f * 10);
+      const color = /light|led/i.test(fan.entity_id) ? 'var(--amber)' : 'var(--fan)';
+      items.push(`<div class="sl" style="--sc:${color}"><div class="h"><span>${esc(fan.label)}</span><b class="dv">${this._fanText(fan, v)}</b></div>
+        <div class="bars ${fan.unavailable ? 'dis' : ''}" data-drag="bars" data-entity="${fan.entity_id}" data-min="${fan.min}" data-max="${fan.max}" data-step="${fan.step}" data-unit="${esc(fan.unit)}">${Array.from({ length: 10 }, (_, i) => `<span class="${i < lit ? 'on' : ''}" style="height:${30 + i * 7}%"></span>`).join('')}</div></div>`);
+    }
+    return items;
+  }
+
+  _fanText(fan, v) {
+    if (fan.unavailable) return '—';
+    if (!(v > fan.min)) return esc(this._t('off'));
+    if (fan.unit === '%') return `${Math.round(v)}%`;
+    if (fan.max <= 1 || !fan.unit) return `${Math.round(((v - fan.min) / ((fan.max - fan.min) || 1)) * 100)}%`;
+    return `${Math.round(v)}${esc(fan.unit)}`;
+  }
+
+  _tuneHtml() {
+    const items = this._tuneItems();
+    if (!items.length) return '';
+    const t = (k) => this._t(k);
+    const sp = this._num(this._entities.speed_factor), fl = this._num(this._entities.flow_factor);
+    const summary = [sp != null ? `${t('speed')} ${Math.round(sp)}%` : '', fl != null ? `${t('flow')} ${Math.round(fl)}%` : ''].filter(Boolean).join(' · ');
+    return `<div class="blk tune-w"><div class="bh"><span class="label">${esc(t('tune'))}</span><small>${esc(t('drag_to_change'))}</small></div><div class="tune">${items.join('')}</div></div>
+      ${this._details('tune', 'tune-vertical', t('tune'), summary, `<div class="tune">${items.join('')}</div>`, 'tune-n')}`;
+  }
+
+  _details(sec, icon, title, small, body, cls = '') {
+    return `<details class="${cls}" data-sec="${sec}" ${this._open[sec] ? 'open' : ''}><summary>${ico(icon, 18)}<b>${esc(title)}</b>${small ? `<small>${esc(small)}</small>` : ''}<span class="chev">${ico('chevron-down', 18)}</span></summary><div class="dbody">${body}</div></details>`;
+  }
+
+  _moveHtml(s) {
+    const hasHome = ['home_all', 'home_x', 'home_y', 'home_z'].some((k) => this._exists(k));
+    const x = this._numVal('position_x'), y = this._numVal('position_y'), z = this._numVal('position_z');
+    if (!hasHome && x == null && !this._exists('position_x')) return '';
+    const dis = s.printing ? 'disabled' : '';
+    const pos = [['X', x, 1], ['Y', y, 1], ['Z', z, 2]];
+    const small = pos.filter(([, v]) => v != null).map(([a, v, d]) => `${a} ${v.toFixed(d)}`).join(' · ');
+    const step = this._jogStep;
+    const jb = (axis, dir, icon) => `<button data-action="jog" data-axis="${axis}" data-dir="${dir}" ${dis} aria-label="${axis}${dir > 0 ? '+' : '-'}">${ico(icon, 20)}</button>`;
+    const body = `
+      ${small ? `<div class="pos">${pos.map(([a, v, d]) => `<div><span>${a}</span><b>${v != null ? v.toFixed(d) : '—'}</b></div>`).join('')}</div>` : ''}
+      <div class="mrow"><span class="label">${esc(this._t('home'))}</span><div class="chips">
+        ${this._exists('home_all') ? `<button class="chip" data-action="home" data-axis="all" ${dis}>${ico('home', 15)}${esc(this._t('home_all'))}</button>` : ''}
+        ${['x', 'y', 'z'].filter((a) => this._exists('home_' + a)).map((a) => `<button class="chip" data-action="home" data-axis="${a}" ${dis}>${a.toUpperCase()}</button>`).join('')}
+      </div></div>
+      <div class="mrow"><span class="label">${esc(this._t('step'))}</span><div class="chips">${[0.1, 1, 10, 100].map((d) => `<button class="chip ${step === d ? 'on' : ''}" data-action="jog-step" data-val="${d}">${d} mm</button>`).join('')}</div></div>
+      <div class="move">
+        <div class="jog">
+          <span></span>${jb('y', 1, 'arrow-up')}<span></span>
+          ${jb('x', -1, 'arrow-left')}<button class="home" data-action="home" data-axis="all" ${dis || (this._exists('home_all') ? '' : 'disabled')} aria-label="Home all">${ico('home', 20)}</button>${jb('x', 1, 'arrow-right')}
+          <span></span>${jb('y', -1, 'arrow-down')}<span></span>
+        </div>
+        <div class="zcol">${jb('z', 1, 'arrow-up')}<span class="zl">Z${step > 10 ? ' ≤10' : ''}</span>${jb('z', -1, 'arrow-down')}</div>
+      </div>`;
+    return this._details('move', 'axis-arrow', this._t('move'), small, body);
+  }
+
+  _macrosHtml(s) {
+    if (!this._macros.length) return '';
+    const dis = s.printing ? 'disabled' : '';
+    const body = `<div class="macros">${this._macros.map((m) => `<button data-action="run-macro" data-entity="${m.entity_id}" ${dis} title="${esc(m.label)}">${ico('play', 15)}<span>${esc(m.label)}</span></button>`).join('')}</div>`;
+    return this._details('macros', 'code-braces', this._t('macros'), String(this._macros.length), body);
+  }
+
+  _sysHtml() {
+    const t = (k) => this._t(k);
+    const btn = (id, lbl, danger) => {
+      const armed = this._confirm === 'sys:' + id;
+      return `<button class="sys ${danger ? 'danger' : ''} ${armed ? 'armed' : ''}" data-action="sys" data-entity="${id}" data-danger="${danger ? 1 : 0}">${ico('restart', 16)}<span>${esc(armed ? t('tap_again') : lbl)}</span></button>`;
+    };
+    const groups = [];
+    const klipper = [];
+    if (this._exists('klipper_restart')) klipper.push(btn(this._entities.klipper_restart, t('restart_klipper')));
+    if (this._exists('fw_restart')) klipper.push(btn(this._entities.fw_restart, t('firmware_restart')));
+    if (klipper.length) groups.push([t('klipper_control'), klipper]);
+    if (this._serviceButtons.length) groups.push([t('service_control'), this._serviceButtons.map((b) => btn(b.entity_id, b.label))]);
+    const host = [];
+    if (this._exists('server_restart')) host.push(btn(this._entities.server_restart, t('server_restart')));
+    if (this._exists('host_restart')) host.push(btn(this._entities.host_restart, t('reboot_host'), true));
+    if (this._exists('host_shutdown')) host.push(btn(this._entities.host_shutdown, t('shutdown_host'), true));
+    if (host.length) groups.push([t('host_control'), host]);
+    if (!groups.length) return '';
+    const body = groups.map(([g, bs]) => `<div class="label sysl">${esc(g)}</div><div class="sysg">${bs.join('')}</div>`).join('');
+    return this._details('sys', 'cog-outline', t('system'), groups.map(([g]) => g).join(' · '), body);
+  }
+
+  // Thumbnail: loaded once per file into a kept <img>, shown only after it has
+  // decoded to a real image; otherwise the file icon stays.
+  _updateThumb(s) {
+    const id = this._entities.thumbnail;
+    const ident = id && s.active ? `${id}|${s.filename || ''}` : null;
+    if (ident === this._thumbIdent) return;
+    this._thumbIdent = ident;
+    this._thumbOk = false;
+    this._thumbEl = null;
+    const pic = ident ? this._hass.states[id]?.attributes?.entity_picture : null;
+    if (!pic) return;
+    const img = new Image();
+    img.className = 'thumb-img';
+    img.alt = '';
+    img.onload = () => { if (this._thumbEl === img && img.naturalWidth > 0) { this._thumbOk = true; this._placeThumb(); } };
+    img.onerror = () => { if (this._thumbEl === img) this._thumbOk = false; };
+    img.src = pic;
+    this._thumbEl = img;
+  }
+
+  _placeThumb() {
+    const slot = this.shadowRoot?.querySelector('.thumb');
+    if (!slot || !this._thumbOk || !this._thumbEl || this._thumbEl.parentNode === slot) return;
+    slot.classList.add('has');
+    slot.appendChild(this._thumbEl);
+  }
+
+  // Keep at most one live <ha-camera-stream> (the selected tab), created once and
+  // only given a new stateObj when Home Assistant sends one.
+  _syncCams() {
+    const root = this.shadowRoot;
+    const wrap = root?.getElementById('cams');
+    if (!wrap) return;
+    const cam = this._tab && this._tab !== 'printer' ? this._cameras.find((c) => c.entity === this._tab) : null;
+    const draw = root.getElementById('r-draw');
+    if (draw) draw.style.display = cam ? 'none' : '';
+    if (!cam) {
+      if (wrap.firstChild) wrap.replaceChildren();
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = '';
+    let el = wrap.querySelector('ha-camera-stream');
+    if (!el || el.dataset.entity !== cam.entity) {
+      wrap.replaceChildren();
+      el = document.createElement('ha-camera-stream');
+      el.dataset.entity = cam.entity;
+      el.muted = true;
+      el.allowExoPlayer = true;
+      el.setAttribute('muted', '');
+      el.className = `cam r${((cam.rotate % 360) + 360) % 360}`;
+      el.style.setProperty('--rot', `${cam.rotate}deg`);
+      wrap.appendChild(el);
+      const live = document.createElement('span');
+      live.className = 'live';
+      live.textContent = 'LIVE';
+      wrap.appendChild(live);
+    }
+    const st = this._hass.states[cam.entity];
+    if (st && el.stateObj !== st) { el.hass = this._hass; el.stateObj = st; }
+  }
+
+  // ── Compact glance card ─────────────────────────────────────────────────────
+  _compactParts() {
+    const s = this._readState();
+    const cfg = this._config;
+    const t = (k) => this._t(k);
+    const name = cfg.name || t('printer');
+    const pct = Math.round(s.progress);
+    const powerOn = this._powerOn();
+    let act = '';
+    if (s.printing && this._exists('pause')) act = `<button class="iconbtn" data-action="pause" title="${esc(t('pause'))}">${ico('pause')}</button>`;
+    else if (s.paused && this._exists('resume')) act = `<button class="iconbtn" data-action="resume" title="${esc(t('resume'))}">${ico('play')}</button>`;
+    else if (cfg.power_switch && !s.active) act = `<button class="toggle ${powerOn ? 'on' : ''}" data-action="toggle-power" aria-label="Power"></button>`;
+    const file = (s.filename || '').replace(/\.gcode$/i, '');
+    const sub = s.active
+      ? [file, s.eta ? `${t('done_at')} ${fmtClock(s.eta, this._hass?.locale)}` : ''].filter(Boolean).join(' · ')
+      : s.status === 'off' ? t('powered_off') : s.status === 'offline' ? t('offline') : s.label;
+    const main = `<div class="gh"><div class="gi">${ico(s.active ? 'printer3d-nozzle' : 'printer3d', 24)}</div><div class="gt"><b>${esc(name)}${s.active ? ` · ${pct}%` : ''}</b><small>${esc(sub)}</small></div>${act}</div>`;
+    const bar = s.active ? `<div class="bar"><i style="width:${clamp(s.progress, 0, 100)}%"></i></div>` : '';
+    const temps = s.offLike ? '' : `<div class="gtemps">
+      ${s.hotend != null ? `<span>${ico('printer3d-nozzle-heat', 15)}${Math.round(s.hotend)}°</span>` : ''}
+      ${s.bed != null ? `<span class="b">${ico('radiator', 15)}${Math.round(s.bed)}°</span>` : ''}
+      ${s.chamber != null ? `<span class="c">${ico('heat-wave', 15)}${Math.round(s.chamber)}°</span>` : ''}
+      ${s.active && s.layer != null && s.layers ? `<span class="r">${esc(t('layer'))} ${Math.round(s.layer)} / ${Math.round(s.layers)}</span>` : ''}</div>`;
+    const left = s.active && s.eta != null ? `${t('left')} ${fmtSeconds(s.eta)}` : s.status === 'off' ? t('plug_off') : '';
+    const foot = `<div class="foot"><span>${esc(left)}</span><button class="link" data-action="open-dialog">${esc(t('full_controls'))} ${ico('chevron-right', 16)}</button></div>`;
+    return { cls: `card glance st-${s.status}`, color: s.color, regions: { 'g-main': main, 'g-bar': bar, 'g-temps': temps, 'g-foot': foot } };
+  }
+
+  // The dialog lives on document.body so no transformed or clipped ancestor of
+  // the card (a dashboard sheet, a grid) can trap the fixed positioning.
+  _openDialog() {
+    if (this._dlg) return;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,6,10,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:auto';
+    const card = document.createElement(CARD_TAG);
+    const { variant, ...rest } = this._config;
+    card.setConfig({ ...rest, variant: 'full', _inDialog: true });
+    card._host = this;
+    card.style.cssText = 'width:min(940px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:30px;box-shadow:0 40px 80px -30px rgba(0,0,0,.8);margin:auto';
+    card.addEventListener('p3d-close', () => this._closeDialog());
+    wrap.addEventListener('click', (ev) => { if (ev.target === wrap) this._closeDialog(); });
+    wrap.appendChild(card);
+    document.body.appendChild(wrap);
+    card.hass = this._hass;
+    document.addEventListener('keydown', this._onKey);
+    this._dlg = { wrap, card };
+  }
+
+  _closeDialog() {
+    if (!this._dlg) return;
+    this._dlg.wrap.remove();
+    document.removeEventListener('keydown', this._onKey);
+    this._dlg = null;
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  _fire(type, detail) {
+    const from = this._host && this._host.isConnected ? this._host : this;
+    from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  _call(domain, service, data) {
+    Promise.resolve(this._hass.callService(domain, service, data)).catch((err) => {
+      this._fire('hass-notification', { message: `${this._config.name || 'Printer'}: ${err?.message || 'action failed'}` });
     });
   }
 
-  // ── Service calls ───────────────────────────────────────────────────────────
+  _press(id) { if (id) this._call('button', 'press', { entity_id: id }); }
 
-  _pressButton(key) {
-    const id = this._entities[key];
-    if (!id || !this._hass) return;
-    this._hass.callService('button', 'press', { entity_id: id });
+  // Two-tap confirmation: the first tap arms the action for 4 s.
+  _arm(key) {
+    if (this._confirm === key) {
+      clearTimeout(this._confirmTimer);
+      this._confirm = null;
+      this._render();
+      return true;
+    }
+    clearTimeout(this._confirmTimer);
+    this._confirm = key;
+    this._confirmTimer = setTimeout(() => { this._confirm = null; this._render(); }, 4000);
+    this._render();
+    return false;
   }
 
-  _pressEntityButton(entityId) {
-    if (!entityId || !this._hass) return;
-    this._hass.callService('button', 'press', { entity_id: entityId });
+  // Set a number entity, keeping the value on screen until HA reflects it (max 4 s).
+  // A delay batches quick +/- taps into one call.
+  _setNum(eid, value, delay = 0) {
+    if (!eid) return;
+    clearTimeout(this._numPending[eid]?.timer);
+    this._numPending[eid] = { value, timer: setTimeout(() => { delete this._numPending[eid]; this._render(); }, 4000 + delay) };
+    clearTimeout(this._sendTimers[eid]);
+    this._sendTimers[eid] = setTimeout(() => this._call('number', 'set_value', { entity_id: eid, value }), delay);
   }
 
-  _setNumber(key, val) {
-    const id = this._entities[key];
-    if (!id || !this._hass) return;
-    this._hass.callService('number', 'set_value', { entity_id: id, value: val });
-  }
+  _onClick(e) {
+    const el = e.composedPath().find((n) => n instanceof Element && n.dataset?.action);
+    if (!el || el.disabled) return;
+    const a = el.dataset.action;
+    const status = this._effectiveStatus();
+    const nav = ['open-dialog', 'close-dialog', 'tab', 'toggle-power', 'sel-heater', 'jog-step'];
+    if ((status === 'off' || status === 'offline') && !nav.includes(a)) return;
 
-  _runMacro(entityId) {
-    if (!entityId || !this._hass) return;
-    this._hass.callService('button', 'press', { entity_id: entityId });
-  }
-
-  _homeAxis(axis) {
-    const keyMap = { all: 'home_all', x: 'home_x', y: 'home_y', z: 'home_z' };
-    this._pressButton(keyMap[axis]);
-  }
-
-  _jog(axis, dist) {
-    if (!this._hass || !axis || isNaN(dist)) return;
-    // Use moonraker REST API via HA script service or direct gcode service
-    // Most moonraker integrations expose a script or button for relative moves.
-    // We send a MOVE gcode via the moonraker.send_gcode HA service if available,
-    // otherwise fall back to calling the firmware_restart as a no-op placeholder.
-    const gcodeMap = { x: 'X', y: 'Y', z: 'Z' };
-    const axis_letter = gcodeMap[axis.toLowerCase()];
-    if (!axis_letter) return;
-    const gcode = `G91\nG0 ${axis_letter}${dist} F3000\nG90`;
-    // Try moonraker gcode service first
-    if (this._hass.services?.moonraker?.send_gcode || this._hass.services?.klipper?.send_gcode) {
-      const domain = this._hass.services?.moonraker?.send_gcode ? 'moonraker' : 'klipper';
-      this._hass.callService(domain, 'send_gcode', { gcode });
-    } else {
-      // Fallback: call a HA script named <base>_jog_<axis>_<dist> if it exists
-      const scriptId = `script.${this._config.base_entity}_jog`;
-      if (this._hass.states[scriptId]) {
-        this._hass.callService('script', 'turn_on', { entity_id: scriptId, variables: { axis, distance: dist } });
+    switch (a) {
+      case 'open-dialog': this._openDialog(); return;
+      case 'close-dialog': this.dispatchEvent(new CustomEvent('p3d-close')); return;
+      case 'tab': this._tab = el.dataset.key; this._render(); return;
+      case 'toggle-power': {
+        const ps = this._config.power_switch;
+        if (!ps) return;
+        // Cutting power mid-print ruins the print, so that needs a second tap.
+        if (this._powerOn() && ['printing', 'paused'].includes(status) && !this._arm('power')) return;
+        this._call('switch', 'toggle', { entity_id: ps });
+        return;
+      }
+      case 'emergency': if (this._arm('emergency')) this._press(this._entities.emergency); return;
+      case 'pause': this._press(this._entities.pause); return;
+      case 'resume': this._press(this._entities.resume); return;
+      case 'cancel': if (this._arm('cancel')) this._press(this._entities.cancel); return;
+      case 'sel-heater': this._sel = this._sel === el.dataset.key ? null : el.dataset.key; this._render(); return;
+      case 'heat-step':
+      case 'heat-set': {
+        const x = this._heaterList(this._readState()).find((h) => h.key === this._sel);
+        if (!x?.targetId) return;
+        const id = x.targetId;
+        const min = parseFloat(attrVal(this._hass, id, 'min')) || 0;
+        const max = parseFloat(attrVal(this._hass, id, 'max')) || x.maxDef;
+        const step = parseFloat(attrVal(this._hass, id, 'step')) || 1;
+        let v;
+        if (a === 'heat-set') v = Number(el.dataset.val);
+        else {
+          const inc = step >= 5 ? step : 5;
+          const cur = this._num(id) || 0;
+          v = cur + Number(el.dataset.dir) * inc;
+          if (v > 0 && v < min) v = Number(el.dataset.dir) > 0 ? min : 0;
+        }
+        v = clamp(Math.round(v / step) * step, v <= 0 ? 0 : min, max);
+        this._setNum(id, v, a === 'heat-step' ? 600 : 0);
+        this._render();
+        return;
+      }
+      case 'run-macro': this._press(el.dataset.entity); return;
+      case 'home': this._press(this._entities[{ all: 'home_all', x: 'home_x', y: 'home_y', z: 'home_z' }[el.dataset.axis]]); return;
+      case 'jog-step': this._jogStep = Number(el.dataset.val); this._render(); return;
+      case 'jog': {
+        const axis = el.dataset.axis;
+        const dist = Number(el.dataset.dir) * (axis === 'z' ? Math.min(this._jogStep, 10) : this._jogStep);
+        this._jog(axis, dist);
+        return;
+      }
+      case 'sys': {
+        if (el.dataset.danger === '1' && !this._arm('sys:' + el.dataset.entity)) return;
+        this._press(el.dataset.entity);
+        return;
       }
     }
   }
 
-  _handleEmergency() {
-    if (!this._confirmEmergency) {
-      this._confirmEmergency = true;
-      this._render();
-      this._confirmTimer = setTimeout(() => {
-        this._confirmEmergency = false;
-        this._render();
-      }, 4000);
-    } else {
-      clearTimeout(this._confirmTimer);
-      this._confirmEmergency = false;
-      this._pressButton('emergency');
+  _jog(axis, dist) {
+    const letter = { x: 'X', y: 'Y', z: 'Z' }[axis];
+    if (!letter || !dist) return;
+    const gcode = `G91\nG0 ${letter}${dist} F3000\nG90`;
+    const sv = this._hass.services || {};
+    if (sv.moonraker?.send_gcode || sv.klipper?.send_gcode) {
+      this._call(sv.moonraker?.send_gcode ? 'moonraker' : 'klipper', 'send_gcode', { gcode });
+      return;
     }
+    // Fallback: a script named <base>_jog taking axis and distance.
+    const scriptId = `script.${this._config.base_entity}_jog`;
+    if (this._hass.states[scriptId]) this._call('script', 'turn_on', { entity_id: scriptId, variables: { axis, distance: dist } });
+    else this._fire('hass-notification', { message: 'Jogging needs the moonraker.send_gcode service or a script.' + this._config.base_entity + '_jog' });
   }
 
-  // ── CSS ──────────────────────────────────────────────────────────────────────
+  // Drag on a speed/flow track or a fan's bars; the value is sent on release.
+  _onPointerDown(ev) {
+    const el = ev.composedPath().find((n) => n instanceof Element && n.dataset?.drag);
+    if (!el || el.classList.contains('dis') || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    const st = this._effectiveStatus();
+    if (st === 'off' || st === 'offline') return;
+    ev.preventDefault();
+    el.setPointerCapture(ev.pointerId);
+    this._dragging = true;
+    const min = Number(el.dataset.min), max = Number(el.dataset.max), step = Number(el.dataset.step) || 1;
+    const unit = el.dataset.unit;
+    const dv = el.parentElement.querySelector('.dv');
+    let value = null;
+    const apply = (e2) => {
+      const r = el.getBoundingClientRect();
+      let f = clamp((e2.clientX - r.left) / r.width, 0, 1);
+      if (el.dataset.drag === 'bars') f = Math.round(f * 10) / 10;
+      value = clamp(Math.round((min + f * (max - min)) / step) * step, min, max);
+      const ff = (value - min) / ((max - min) || 1);
+      if (el.dataset.drag === 'track') el.querySelector('i').style.width = `${(ff * 100).toFixed(1)}%`;
+      else el.querySelectorAll('span').forEach((s, i) => s.classList.toggle('on', i < Math.round(ff * 10)));
+      if (dv) dv.textContent = !(value > min) && el.dataset.drag === 'bars' ? this._t('off')
+        : unit === '%' ? `${Math.round(value)}%` : max <= 1 || !unit ? `${Math.round(ff * 100)}%` : `${Math.round(value)}${unit}`;
+    };
+    apply(ev);
+    const move = (e2) => apply(e2);
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      this._dragging = false;
+      if (value != null) this._setNum(el.dataset.entity, value);
+      this._render();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  }
 
+  // ── CSS ─────────────────────────────────────────────────────────────────────
   _css() {
     return `
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+:host {
+  --bg: #0b0d12; --bg2: #11141b; --surface: #161a22; --surface2: #1d222c; --line: rgba(255,255,255,.07);
+  --text: #f2f3f5; --text2: #a9afbb; --text3: #737b8c;
+  --amber: #ffb347; --heat: #ff7a45; --ok: #4ade80; --danger: #ff5c6c; --violet: #a78bfa; --blue: #8aa2ff; --fan: #34d1a6;
+  --hot: #ff7a45; --bed: #3fa9ff; --cham: #a78bfa;
+  --r-lg: 26px;
+  display: block; container-type: inline-size; color: var(--text);
+  font-family: Inter, Figtree, Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:disabled { cursor: default; opacity: .38; }
+.i { fill: currentColor; flex-shrink: 0; display: block; }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); font-weight: 600; }
 
-:host { display: block; }
+.card { background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), var(--bg2); border: 1px solid var(--line); border-radius: 30px; overflow: hidden; user-select: none; -webkit-user-select: none; }
 
-.card {
-  background: var(--card-background-color, var(--ha-card-background-color, #1c1c1e));
-  border-radius: var(--ha-card-border-radius, 12px);
-  box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.35));
-  padding: 16px;
-  font-family: var(--primary-font-family, Roboto, sans-serif);
-  color: var(--primary-text-color);
-  overflow: hidden;
-  position: relative;
+/* header: buttons never shrink; the pill goes first when it gets tight */
+.dh { display: flex; align-items: center; gap: 10px; padding: 18px 20px 0; }
+.dh .ic { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; background: color-mix(in srgb, var(--mc) 16%, transparent); color: var(--mc); }
+.dh .tt { min-width: 0; flex: 0 1 auto; }
+.dh h3 { margin: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh p { margin: 1px 0 0; font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh .sp { flex: 1; }
+.pill { height: 30px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
+  color: var(--mc); background: color-mix(in srgb, var(--mc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--mc) 35%, transparent); }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--mc); box-shadow: 0 0 8px var(--mc); }
+@container (max-width: 600px) { .dh .pill { display: none; } }
+.iconbtn { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--text2); background: rgba(255,255,255,.05); border: 1px solid var(--line); flex-shrink: 0; }
+.iconbtn:hover { color: var(--text); }
+.iconbtn.danger { color: var(--danger); background: rgba(255,92,108,.1); border-color: rgba(255,92,108,.28); }
+.iconbtn.danger.armed { color: #fff; background: var(--danger); animation: pulse 1s ease-in-out infinite; }
+.power { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: var(--ok); color: #06140b; box-shadow: 0 0 0 5px rgba(74,222,128,.18); }
+.power.off { background: rgba(255,255,255,.07); color: var(--text2); box-shadow: none; border: 1px solid var(--line); }
+.power.armed { background: var(--danger); color: #fff; box-shadow: 0 0 0 5px rgba(255,92,108,.25); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .6; } }
+
+.banner { margin: 14px 20px 0; border-radius: 14px; padding: 10px 12px; font-size: 12.5px; display: flex; gap: 9px; align-items: center; background: rgba(138,162,255,.1); border: 1px solid rgba(138,162,255,.25); color: #c9d3ff; }
+.banner.bad { background: rgba(255,92,108,.1); border-color: rgba(255,92,108,.3); color: #ffc2c8; }
+
+.body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 16px 18px; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.col > div:empty { display: none; }
+@container (min-width: 700px) {
+  .body { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 20px; padding: 18px 22px 22px; }
+  .is-off .body { grid-template-columns: minmax(0, 1fr); }
+  .is-off .c1 { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .is-off .c2 { display: none; }
 }
 
-/* ── Message banner ── */
-.msg-banner { display:flex; align-items:flex-start; gap:8px; margin:-4px 0 10px; padding:9px 12px; border-radius:8px; border:1px solid transparent; }
-.msg-icon { color:var(--primary-text-color); flex-shrink:0; margin-top:1px; opacity:.8; }
-.msg-text { font-size:.82rem; font-weight:500; color:var(--primary-text-color); line-height:1.4; word-break:break-word; }
+/* live view */
+.hero { border-radius: var(--r-lg); background: radial-gradient(260px 200px at 50% 60%, rgba(255,122,69,.1), transparent 70%), var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.view { position: relative; height: 250px; display: grid; place-items: center; }
+@container (max-width: 480px) { .view { height: 220px; } }
+.draw { display: grid; place-items: center; width: 100%; height: 100%; }
+.draw svg { width: 250px; height: 230px; max-width: 100%; }
+.camwrap { position: absolute; inset: 0; background: #000; overflow: hidden; }
+.cam { display: block; width: 100%; height: 100%; transform: rotate(var(--rot, 0deg)); transform-origin: center; }
+.cam.r90, .cam.r270 { transform: rotate(var(--rot)) scale(1.78); }
+.live { position: absolute; top: 12px; left: 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; background: rgba(255,92,108,.9); color: #fff; padding: 3px 7px; border-radius: 6px; pointer-events: none; }
+.tabs { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); background: rgba(0,0,0,.18); }
+.tabs:empty { display: none; }
+.tabs button { flex: 1; min-width: 0; height: 32px; border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text2); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.tabs button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tabs button.on { background: rgba(255,255,255,.08); color: var(--text); }
+.th-run { animation: sweep 2.6s ease-in-out infinite alternate; }
+@keyframes sweep { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
 
-/* ── Header ── */
-.header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-.header-right { display:flex; align-items:center; gap:8px; }
-/* Power button */
-.power-btn { display:flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:50%; border:1.5px solid; cursor:pointer; background:transparent; transition:all .18s; padding:0; }
-.power-on  { border-color:rgba(76,175,80,.5); color:#4caf50; }
-.power-on:hover  { background:rgba(76,175,80,.15); border-color:#4caf50; }
-.power-off { border-color:rgba(var(--rgb-secondary-text-color,130,130,130),.4); color:var(--secondary-text-color); }
-.power-off:hover { background:rgba(244,67,54,.1); border-color:#f44336; color:#f44336; }
-.estop-btn { border-color:rgba(244,67,54,.45); color:#ff6b6b; }
-.estop-btn:hover { background:rgba(244,67,54,.15); border-color:#f44336; }
-.estop-confirm { background:rgba(244,67,54,.4) !important; color:#fff !important; border-color:#f44336 !important; animation:pulse-red .6s ease infinite; }
-.printer-name { font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
-.state-chip { display:flex; align-items:center; gap:6px; background:var(--chip-bg); border:1px solid var(--mode-color); border-radius:20px; padding:4px 10px; }
-.state-dot { width:7px; height:7px; border-radius:50%; background:var(--mode-color); flex-shrink:0; }
-.state-label { font-size:.78rem; font-weight:600; color:var(--mode-color); letter-spacing:.04em; text-transform:uppercase; }
+/* progress */
+.prog { border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); padding: 16px 16px 14px; }
+.prog .top { display: flex; gap: 14px; align-items: center; }
+.thumb { width: 64px; height: 64px; border-radius: 16px; background: rgba(255,255,255,.05); display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--line); color: var(--text3); overflow: hidden; position: relative; }
+.thumb.has { background: #0f1218; }
+.thumb.has > .i { display: none; }
+.thumb-img { width: 100%; height: 100%; object-fit: contain; }
+.fn { min-width: 0; flex: 1; }
+.fn b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn small { font-size: 12px; color: var(--text2); }
+.pct { font-size: 40px; font-weight: 300; letter-spacing: -.03em; line-height: 1; flex-shrink: 0; }
+.pct sup { font-size: 16px; color: var(--text2); vertical-align: top; position: relative; top: 5px; }
+.bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.07); margin: 14px 0 12px; overflow: hidden; position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--mc) 60%, transparent), var(--mc)); transition: width .4s; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.facts.f3 { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+@container (max-width: 420px) { .facts:not(.f3) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fact { border-radius: 13px; background: rgba(0,0,0,.25); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fact span { font-size: 10.5px; color: var(--text3); }
+.fact b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (min-width: 421px) and (max-width: 860px) { .fact b { font-size: 13px; } }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btns.n1 { grid-template-columns: 1fr; }
+.big { height: 48px; border-radius: 15px; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
+.big.warn { background: rgba(255,179,71,.14); border-color: rgba(255,179,71,.32); color: var(--amber); }
+.big.stop { background: rgba(255,92,108,.1); border-color: rgba(255,92,108,.28); color: var(--danger); }
+.big.stop.armed { background: var(--danger); color: #fff; }
+.big.go { background: var(--ok); color: #06140b; border: 0; }
 
-/* ── Printer SVG ── */
-.printer-section { display:flex; justify-content:center; align-items:center; margin:8px 0; }
-.printer-svg-wrap { width:100%; max-width:200px; height:180px; position:relative; }
-.printer-off { opacity:0.35; filter:grayscale(1); }
-.printer-off-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--primary-text-color); opacity:1; pointer-events:none; }
+/* off */
+.offhero { border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.offart svg { width: 180px; height: 160px; opacity: .45; display: block; }
+.offhero p { margin: 0; font-size: 13px; color: var(--text2); line-height: 1.45; }
+.offhero .big { width: 100%; }
 
-/* ── Stats bar ── */
-.stats-bar { display:flex; justify-content:space-around; gap:4px; margin:8px 0 12px; flex-wrap:wrap; }
-.stat-item { display:flex; flex-direction:column; align-items:space-between; gap:2px; flex:1; min-width:56px; }
-.stat-icon { color:var(--secondary-text-color); line-height:1; opacity:.7; text-align:center;}
-.stat-val { font-family:'Share Tech Mono',monospace; font-size:.85rem; font-weight:600; color:var(--primary-text-color); text-align:center;}
-.hotend-val { color:#ff8c66; }
-.bed-val    { color:#66b2ff; }
-.stat-label { font-size:.68rem; color:var(--secondary-text-color); opacity:.7; text-transform:uppercase; letter-spacing:.06em; text-align:center; }
+/* blocks */
+.blk .bh { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 0 2px 8px; }
+.blk .bh small { font-size: 12px; color: var(--text2); text-align: right; }
 
-/* ── Separator ── */
-.sep { height:1px; background:var(--divider-color,rgba(255,255,255,.08)); margin:8px 0; }
+/* temperatures */
+.temps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.t { border-radius: 16px; background: var(--surface); border: 1px solid var(--line); padding: 11px 12px 10px; min-width: 0; text-align: left; display: flex; flex-direction: column; }
+.t.heat { background: radial-gradient(120px 80px at 0% 0%, color-mix(in srgb, var(--tc) 16%, transparent), transparent 80%), var(--surface); border-color: color-mix(in srgb, var(--tc) 28%, transparent); }
+.t .n { font-size: 11.5px; color: var(--text2); display: flex; gap: 5px; align-items: center; min-width: 0; }
+.t .n span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t .n .i { color: var(--tc); }
+.t .v { font-size: 22px; font-weight: 500; margin-top: 4px; letter-spacing: -.02em; white-space: nowrap; }
+.t .v small { font-size: 12px; color: var(--text3); font-weight: 500; margin-left: 3px; letter-spacing: 0; }
+.t .tb { height: 4px; border-radius: 3px; background: rgba(255,255,255,.07); margin-top: 8px; position: relative; }
+.t .tb i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--tc); }
+.t .tb em { position: absolute; top: -3px; width: 2px; height: 10px; border-radius: 1px; background: var(--text); margin-left: -1px; }
+.t.sel { outline: 2px solid var(--tc); outline-offset: -1px; }
+@container (max-width: 400px) { .t .v { font-size: 19px; } .t .v small { display: none; } }
+.setter { grid-column: 1 / -1; border-radius: 16px; background: rgba(0,0,0,.28); padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.setter .lbl { font-size: 12.5px; color: var(--text2); flex: 1; min-width: 0; }
+.setter .lbl b { color: var(--text); font-weight: 600; }
+.setter .presets { order: 3; width: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+.step { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,.06); border: 1px solid var(--line); flex-shrink: 0; }
+.setter .val { font-size: 20px; font-weight: 500; min-width: 58px; text-align: center; }
+.chip { height: 34px; padding: 0 12px; border-radius: 11px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.05); border: 1px solid var(--line); color: var(--text2); white-space: nowrap; }
+.chip.on { background: color-mix(in srgb, var(--mc) 16%, transparent); border-color: color-mix(in srgb, var(--mc) 42%, transparent); color: var(--text); }
+.chips { display: flex; gap: 7px; flex-wrap: wrap; }
 
-/* ── Tiles ── */
-.tiles { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; }
-.tile { background:var(--secondary-background-color,rgba(255,255,255,.04)); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:4px; transition:opacity .3s; }
-.tile-dim { opacity:.45; }
-.tile-progress { grid-column:span 2; flex-direction:row; align-items:center; gap:12px; }
-.tile-arc { flex-shrink:0; }
-.tile-info { display:flex; flex-direction:column; gap:2px; }
-.tile-primary { font-family:'Share Tech Mono',monospace; font-size:1.4rem; font-weight:700; color:var(--mode-color); }
-.tile-secondary { font-size:.78rem; color:var(--secondary-text-color); opacity:.75; }
-.tile-icon { color:var(--mode-color); opacity:.8; line-height:1; }
-.tile-label { font-size:.68rem; color:var(--secondary-text-color); opacity:.65; text-transform:uppercase; letter-spacing:.06em; }
-.tile-value { font-size:.88rem; font-weight:600; margin-top:2px; }
-.tile-sub { font-size:.72rem; color:var(--secondary-text-color); opacity:.65; }
-.tile-filename { overflow:hidden; }
-.filename { font-size:.78rem; font-family:'Share Tech Mono',monospace; word-break:break-all; }
+/* tune */
+.tune { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@container (max-width: 480px) { .tune { grid-template-columns: 1fr; } }
+.sl { border-radius: 16px; background: var(--surface); border: 1px solid var(--line); padding: 10px 12px 12px; min-width: 0; }
+.dbody .sl { background: rgba(0,0,0,.2); }
+.sl .h { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+.sl .h span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl .h b { color: var(--text); font-weight: 600; flex-shrink: 0; }
+.bars { display: flex; gap: 4px; align-items: flex-end; height: 30px; touch-action: none; cursor: pointer; }
+.bars span { flex: 1; border-radius: 5px; background: rgba(255,255,255,.07); pointer-events: none; }
+.bars span.on { background: var(--sc); }
+.track { height: 30px; border-radius: 10px; background: rgba(0,0,0,.3); position: relative; overflow: hidden; touch-action: none; cursor: pointer; }
+.track i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--sc) 35%, transparent); border-right: 3px solid var(--sc); pointer-events: none; }
+.track .mid { position: absolute; top: 6px; bottom: 6px; width: 1px; background: rgba(255,255,255,.25); pointer-events: none; }
+.bars.dis, .track.dis { opacity: .35; cursor: default; }
+.tune-n { display: none; }
+@container (max-width: 699px) { .tune-w { display: none; } .tune-n { display: block; } }
 
-/* ── File tile with thumbnail ── */
-.tile-file { grid-column: span 2; flex-direction: row; align-items: center; gap: 10px; }
-.tile-has-thumb { }
-.tile-file-active .thumb-img { width: 100px; height: 76px; }
-.thumb-wrap { position:relative; flex-shrink:0; }
-.thumb-wrap .thumb-img { display:none; }
-.thumb-wrap .thumb-fallback { display:flex; width:72px; height:56px; align-items:center; justify-content:center; border-radius:6px; background:rgba(0,0,0,.2); }
-.thumb-wrap.thumb-loaded .thumb-img { display:block; }
-.thumb-wrap.thumb-loaded .thumb-fallback { display:none; }
-.thumb-wrap.thumb-failed .thumb-img { display:none; }
-.thumb-wrap.thumb-failed .thumb-fallback { display:flex; }
-.tile-file-active .thumb-wrap .thumb-fallback { width:100px; height:76px; }
-.thumb-img { width: 72px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,.3); }
-.tile-file-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+/* folding sections */
+details { border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 13px 14px; font-size: 13.5px; cursor: pointer; min-width: 0; }
+summary::-webkit-details-marker { display: none; }
+summary > .i { color: var(--text2); }
+summary b { font-weight: 600; flex-shrink: 0; }
+summary small { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+summary .chev { margin-left: auto; color: var(--text3); display: grid; transition: transform .2s; flex-shrink: 0; }
+details[open] summary .chev { transform: rotate(180deg); }
+.dbody { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.pos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pos div { border-radius: 11px; background: rgba(0,0,0,.25); padding: 6px 9px; font-size: 11px; color: var(--text3); }
+.pos b { display: block; font-size: 14px; color: var(--text); font-weight: 600; }
+.mrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mrow .label { min-width: 44px; }
+.move { display: flex; gap: 16px; align-items: flex-start; }
+.jog { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px); gap: 6px; }
+.jog button, .zcol button { width: 44px; height: 44px; border-radius: 13px; background: rgba(255,255,255,.06); border: 1px solid var(--line); display: grid; place-items: center; color: var(--text2); }
+.jog button.home { color: var(--ok); }
+.zcol { display: grid; grid-template-rows: 44px 44px 44px; gap: 6px; justify-items: center; align-items: center; }
+.zl { font-size: 12px; font-weight: 700; color: var(--text3); }
+.macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+@container (max-width: 480px) { .macros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.macros button { height: 38px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--text2); display: flex; align-items: center; gap: 7px; padding: 0 10px; min-width: 0; }
+.macros button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.macros button .i { color: var(--violet); }
+.sysl { margin-top: 2px; }
+.sysg { display: flex; flex-wrap: wrap; gap: 7px; }
+.sys { height: 38px; padding: 0 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; color: var(--text2); display: inline-flex; align-items: center; gap: 7px; }
+.sys.danger { color: var(--danger); border-color: rgba(255,92,108,.28); background: rgba(255,92,108,.08); }
+.sys.armed { background: var(--danger); color: #fff; }
 
-.mono { font-family:'Share Tech Mono',monospace; }
-.na { opacity:.35; }
-
-/* ── Controls ── */
-.controls { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; justify-content:center; }
-.ctrl-btn { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; border:none; cursor:pointer; font-family:var(--primary-font-family,Roboto,sans-serif); font-size:.82rem; font-weight:600; transition:all .18s; background:var(--secondary-background-color,rgba(255,255,255,.06)); color:var(--primary-text-color); }
-.ctrl-btn:hover { filter:brightness(1.2); }
-.ctrl-btn:active { transform:scale(0.97); }
-.ctrl-pause    { background:rgba(229,192,0,.15); color:#e5c000; border:1px solid rgba(229,192,0,.3); }
-.ctrl-resume   { background:rgba(76,175,80,.15); color:#4caf50; border:1px solid rgba(76,175,80,.3); }
-.ctrl-cancel   { background:rgba(244,67,54,.15); color:#f44336; border:1px solid rgba(244,67,54,.3); }
-.ctrl-emergency { background:rgba(244,67,54,.12); color:#ff6b6b; border:1px solid rgba(244,67,54,.25); }
-.ctrl-emergency.confirm { background:rgba(244,67,54,.4); color:#fff; border-color:#f44336; animation:pulse-red .6s ease infinite; }
-.ctrl-tune { background:var(--chip-bg); color:var(--mode-color); border:1px solid var(--mode-color); }
-@keyframes pulse-red { 0%,100% { box-shadow:0 0 0 0 rgba(244,67,54,.5); } 50% { box-shadow:0 0 0 6px rgba(244,67,54,0); } }
-
-/* ── Camera button ── */
-.camera-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px; margin-top:4px; border-radius:10px; border:1px solid var(--divider-color,rgba(255,255,255,.1)); background:var(--secondary-background-color,rgba(255,255,255,.04)); color:var(--primary-text-color); cursor:pointer; font-family:var(--primary-font-family,Roboto,sans-serif); font-size:.88rem; font-weight:600; transition:all .18s; }
-.camera-btn:hover, .camera-btn.active { background:var(--chip-bg); border-color:var(--mode-color); color:var(--mode-color); }
-.cam-badge { background:var(--mode-color); color:var(--card-background-color,#1c1c1e); border-radius:10px; font-size:.72rem; font-weight:700; padding:1px 7px; min-width:18px; text-align:center; }
-.cam-chevron { margin-left:auto; display:flex; align-items:center; transition:transform .25s cubic-bezier(.4,0,.2,1); }
-.cam-chevron.open { transform:rotate(180deg); }
-.cameras-section { overflow:hidden; max-height:0; transition:max-height .4s cubic-bezier(.4,0,.2,1); }
-.cameras-section.open { max-height:9999px; }
-
-/* ── Overlay ── */
-.overlay { position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .25s; z-index:10; border-radius:var(--ha-card-border-radius,12px); }
-.overlay.visible { opacity:1; pointer-events:all; }
-
-/* ── Bottom sheet ── */
-.sheet { position:absolute; left:0; right:0; bottom:0; background:var(--card-background-color,#1c1c1e); border-radius:16px 16px 0 0; padding:12px 16px 24px; z-index:20; transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); box-shadow:0 -4px 24px rgba(0,0,0,.4); max-height:72vh; display:flex; flex-direction:column; }
-.sheet.open { transform:translateY(0); }
-.sheet-handle { width:36px; height:4px; background:var(--divider-color,rgba(255,255,255,.15)); border-radius:2px; margin:0 auto 12px; flex-shrink:0; }
-.sheet-title { display:flex; align-items:center; gap:8px; font-size:.95rem; font-weight:600; margin-bottom:16px; color:var(--mode-color); flex-shrink:0; }
-.sheet-scroll { flex:1; overflow-y:auto; padding-bottom:20px; }
-
-/* ── Camera views ── */
-.camera-views { display:flex; flex-direction:column; gap:12px; padding-top:8px; }
-.cam-view { border-radius:10px; overflow:hidden; background:rgba(0,0,0,.3); }
-.cam-label { font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--secondary-text-color); padding:6px 10px 4px; opacity:.7; }
-.cam-stream-wrap { overflow:hidden; border-radius:0 0 10px 10px; aspect-ratio:16/9; background:#000; position:relative; }
-.cam-stream { display:block; width:100%; height:100%; transform:rotate(var(--cam-rotate,0deg)); transform-origin:center center; }
-.cam-stream-wrap[style*="90deg"] .cam-stream, .cam-stream-wrap[style*="270deg"] .cam-stream { transform:rotate(var(--cam-rotate,0deg)) scale(1.78); }
-
-/* ── Tune rows (speed/flow sheet) ── */
-.tune-rows { display:flex; flex-direction:column; gap:16px; }
-.tune-row {}
-.tune-row-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.tune-row-label { display:flex; align-items:center; gap:6px; font-size:.85rem; font-weight:600; color:var(--secondary-text-color); }
-.tune-row-val { font-size:.88rem; font-weight:700; color:var(--mode-color); }
-.tune-slider { width:99%; appearance:none; height:4px; border-radius:2px; background:var(--divider-color,rgba(255,255,255,.15)); outline:none; cursor:pointer; accent-color:var(--mode-color); }
-.tune-slider::-webkit-slider-thumb { appearance:none; width:18px; height:18px; border-radius:50%; background:var(--mode-color); cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.4); }
-
-/* ── Macros sheet ── */
-.macro-list { display:flex; flex-direction:column; gap:6px; max-height:55vh; overflow-y:auto; }
-.macro-btn { display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--divider-color,rgba(255,255,255,.1)); background:var(--secondary-background-color,rgba(255,255,255,.04)); color:var(--primary-text-color); cursor:pointer; font-family:var(--primary-font-family,Roboto,sans-serif); font-size:.85rem; font-weight:600; text-align:left; transition:all .18s; }
-.macro-btn:hover { background:var(--chip-bg); border-color:var(--mode-color); color:var(--mode-color); }
-.macro-btn:active { transform:scale(0.98); }
-
-/* ── Movement sheet ── */
-.pos-bar { display:flex; gap:16px; margin-bottom:14px; padding:8px 12px; background:var(--secondary-background-color,rgba(255,255,255,.04)); border-radius:8px; }
-.pos-item { display:flex; align-items:center; gap:6px; }
-.pos-axis { font-size:.75rem; font-weight:700; padding:2px 5px; border-radius:4px; }
-.pos-x { background:rgba(244,67,54,.2); color:#f44336; }
-.pos-y { background:rgba(76,175,80,.2); color:#4caf50; }
-.pos-z { background:rgba(33,150,243,.2); color:#2196f3; }
-.pos-val { font-size:.85rem; font-weight:600; }
-
-.home-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
-.home-btn { display:flex; align-items:center; gap:5px; padding:7px 12px; border-radius:8px; border:1px solid var(--divider-color,rgba(255,255,255,.1)); background:var(--secondary-background-color,rgba(255,255,255,.04)); color:var(--primary-text-color); cursor:pointer; font-family:var(--primary-font-family,Roboto,sans-serif); font-size:.82rem; font-weight:600; transition:all .18s; }
-.home-btn:hover { background:var(--chip-bg); border-color:var(--mode-color); color:var(--mode-color); }
-.home-x { color:#f44336; border-color:rgba(244,67,54,.3); background:rgba(244,67,54,.08); }
-.home-y { color:#4caf50; border-color:rgba(76,175,80,.3); background:rgba(76,175,80,.08); }
-.home-z { color:#2196f3; border-color:rgba(33,150,243,.3); background:rgba(33,150,243,.08); }
-
-.jog-section { display:flex; gap:12px; align-items:flex-start; }
-.jog-xy { display:flex; flex-direction:column; gap:4px; flex:1; }
-.jog-xy-top, .jog-xy-bot { display:flex; gap:4px; justify-content:center; }
-.jog-xy-mid { display:flex; gap:4px; align-items:center; justify-content:center; }
-.jog-center { display:flex; align-items:center; justify-content:center; width:36px; height:36px; opacity:.4; flex-shrink:0; }
-
-.jog-z { display:flex; flex-direction:column; gap:4px; align-items:center; width:52px; flex-shrink:0; }
-.jog-z-label { font-size:.75rem; font-weight:700; padding:2px 8px; border-radius:4px; background:rgba(33,150,243,.2); color:#2196f3; margin-bottom:2px; }
-.jog-z-sep { height:4px; }
-
-.jog-btn { padding:5px 7px; border-radius:6px; border:1px solid var(--divider-color,rgba(255,255,255,.1)); background:var(--secondary-background-color,rgba(255,255,255,.04)); color:var(--primary-text-color); cursor:pointer; font-family:'Share Tech Mono',monospace; font-size:.72rem; font-weight:600; transition:all .15s; min-width:32px; text-align:center; }
-.jog-btn:hover { background:var(--chip-bg); border-color:var(--mode-color); color:var(--mode-color); }
-.jog-btn:active { transform:scale(0.95); }
-.jog-z-btn { width:100%; }
-.jog-section.disabled, .home-row.disabled, .pos-bar.disabled, .macro-list.disabled { opacity:.5; pointer-events:none; }
-
-/* ── Temps & Fans sheet ── */
-.temps-body { display:flex; flex-direction:column; gap:0; }
-.temps-section-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--secondary-text-color); opacity:.6; margin-bottom:6px; }
-
-.temp-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--divider-color,rgba(255,255,255,.06)); }
-.temp-row-info { display:flex; flex-direction:column; gap:1px; min-width:0; }
-.temp-row-name { font-size:.85rem; font-weight:600; }
-.temp-row-state { font-size:.7rem; color:var(--secondary-text-color); opacity:.6; text-transform:uppercase; }
-.temp-state-active { color:#ff8c66; opacity:1; }
-.temp-arrow { font-size:.75rem; color:var(--secondary-text-color); opacity:.4; }
-.temp-row-ctrl { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.temp-current { font-size:.85rem; color:var(--mode-color); min-width:42px; text-align:right; }
-.temp-input { width:52px; padding:4px 6px; border-radius:6px; border:1px solid var(--divider-color,rgba(255,255,255,.15)); background:var(--secondary-background-color,rgba(255,255,255,.06)); color:var(--primary-text-color); font-family:'Share Tech Mono',monospace; font-size:.85rem; text-align:center; outline:none; }
-.temp-input:focus { border-color:var(--mode-color); }
-.temp-unit { font-size:.75rem; color:var(--secondary-text-color); opacity:.6; }
-
-.fan-row { padding:8px 0; border-bottom:1px solid var(--divider-color,rgba(255,255,255,.06)); }
-.fan-row-info { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-.fan-name { font-size:.85rem; font-weight:600; }
-.fan-val { font-size:.82rem; color:var(--mode-color); }
-
-/* ── System sheet ── */
-.system-body { display:flex; flex-direction:column; gap:6px; }
-.sys-section-label { font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--secondary-text-color); opacity:.55; margin-top:10px; margin-bottom:2px; padding:0 2px; }
-.sys-section-label:first-child { margin-top:0; }
-.system-warning { font-size:.75rem; color:var(--secondary-text-color); opacity:.65; margin-bottom:4px; padding:7px 10px; border-radius:6px; background:rgba(244,67,54,.06); border:1px solid rgba(244,67,54,.15); }
-.ctrl-system { background:rgba(244,67,54,.08); color:#ff6b6b; border:1px solid rgba(244,67,54,.2); }
-.system-btn { display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border-radius:8px; border:1px solid rgba(var(--rgb-primary-text-color,200,200,200),.12); background:rgba(var(--rgb-primary-text-color,200,200,200),.05); color:var(--primary-text-color); cursor:pointer; font-family:var(--primary-font-family,Roboto,sans-serif); font-size:.85rem; font-weight:500; text-align:left; transition:all .18s; }
-.system-btn:hover { background:rgba(var(--rgb-primary-text-color,200,200,200),.1); }
-.system-btn:active { transform:scale(0.98); }
-.system-btn-service { color:var(--secondary-text-color); font-weight:400; }
-.system-btn-danger { border-color:rgba(244,67,54,.3); background:rgba(244,67,54,.06); color:#ff6b6b; font-weight:600; }
-.system-btn-danger:hover { background:rgba(244,67,54,.18); border-color:#f44336; }
-    `;
+/* compact glance */
+.glance { border-radius: 22px; background: var(--surface); padding: 14px; }
+.gh { display: flex; align-items: center; gap: 12px; }
+.gi { width: 46px; height: 46px; border-radius: 15px; display: grid; place-items: center; background: color-mix(in srgb, var(--mc) 16%, transparent); color: var(--mc); flex-shrink: 0; }
+.gt { flex: 1; min-width: 0; }
+.gt b { display: block; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt small { display: block; font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glance .bar { margin: 12px 0 0; height: 8px; }
+.gtemps { display: flex; gap: 14px; font-size: 12.5px; color: var(--text2); margin-top: 10px; align-items: center; }
+.gtemps:empty { display: none; }
+.gtemps span { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+.gtemps .i { color: var(--hot); }
+.gtemps .b .i { color: var(--bed); }
+.gtemps .c .i { color: var(--cham); }
+.gtemps .r { margin-left: auto; }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text3); }
+.foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link { font-size: 12.5px; font-weight: 600; color: var(--text); display: inline-flex; gap: 2px; align-items: center; white-space: nowrap; flex-shrink: 0; }
+.toggle { width: 46px; height: 28px; border-radius: 999px; background: rgba(255,255,255,.12); position: relative; flex-shrink: 0; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: left .2s; }
+.toggle.on { background: var(--ok); }
+.toggle.on::after { left: 21px; }
+`;
   }
-
-  getCardSize() { return 6; }
 }
 
-// ── Inline SVG Icons ──────────────────────────────────────────────────────────
-const ICON_HOTEND = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.08-3.61 5.75-2.39 8.9.04.1.08.2.08.33 0 .22-.15.42-.35.5-.23.1-.47.04-.66-.12a.6.6 0 0 1-.14-.17c-1.13-1.43-1.31-3.48-.55-5.12C5.78 10 4.87 12.3 5 14.47c.06.5.12 1 .29 1.5.14.6.41 1.2.71 1.73 1.08 1.73 2.95 2.97 4.96 3.22 2.14.27 4.43-.12 6.07-1.6 1.83-1.66 2.47-4.32 1.53-6.6l-.13-.26c-.21-.46-.77-1.26-.77-1.26m-3.16 6.3c-.28.24-.74.5-1.1.6-1.12.4-2.24-.16-2.9-.82 1.19-.28 1.9-1.16 2.11-2.05.17-.8-.15-1.46-.28-2.23-.12-.74-.1-1.37.17-2.06.19.38.39.76.63 1.06.77 1 1.98 1.44 2.24 2.8.04.14.06.28.06.43.03.82-.33 1.72-.93 2.27"/></svg>`;
-const ICON_BED = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 7H5v2H3V4H1v16h2v-3h18v3h2V11a4 4 0 0 0-4-4m-8 4H7v-2h4zm6 0h-4v-2h4z"/></svg>`;
-const ICON_SPEED = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44z"/><path d="M10.59 15.41a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z"/></svg>`;
-const ICON_FLOW = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2m1 14.93V15a1 1 0 0 0-2 0v1.93A8 8 0 0 1 4.07 11H6a1 1 0 0 0 0-2H4.07A8 8 0 0 1 11 4.07V6a1 1 0 0 0 2 0V4.07A8 8 0 0 1 19.93 11H18a1 1 0 0 0 0 2h1.93A8 8 0 0 1 13 16.93M12 11a1 1 0 1 0 1 1 1 1 0 0 0-1-1"/></svg>`;
-const ICON_ETA = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-const ICON_ELAPSED = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8 8 8 0 0 0-8 8 8 8 0 0 0 8 8m0-18a10 10 0 0 1 10 10 10 10 0 0 1-10 10C6.47 22 2 17.5 2 12A10 10 0 0 1 12 2m.5 5v5.25l4.5 2.67-.75 1.23L11 13V7z"/></svg>`;
-const ICON_FILE = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5z"/></svg>`;
-const ICON_PAUSE = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 19h4V5h-4M6 19h4V5H6v14z"/></svg>`;
-const ICON_PLAY = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
-const ICON_STOP = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 18H6V6h12v12z"/></svg>`;
-const ICON_EMERGENCY = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 14h-2V9h2m0 9h-2v-2h2M1 21h22L12 2 1 21z"/></svg>`;
-const ICON_CAMERA = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m8 3a5 5 0 0 0-5 5 5 5 0 0 0 5 5 5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 2a3 3 0 0 1 3 3 3 3 0 0 1-3 3 3 3 0 0 1-3-3 3 3 0 0 1 3-3z"/></svg>`;
-const ICON_TUNE = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3M3 5v2h10V5H3m10 16v-2h8v-2h-8v-2h-2v6h2M7 9v2H3v2h4v2h2V9H7m14 4v-2H11v2h10m-6-4h2V7h4V5h-4V3h-2v6z"/></svg>`;
-const ICON_CHEVRON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-const ICON_MACRO = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-5a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3zm8 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3z"/></svg>`;
-const ICON_MOVE = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6v5h5l-6 6-6-6h5V6h2M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10A10 10 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8 8 8 0 0 0 8 8 8 8 0 0 0 8-8 8 8 0 0 0-8-8z"/></svg>`;
-const ICON_THERMOMETER = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0m-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1z"/></svg>`;
-const ICON_HOME = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>`;
-const ICON_INFO = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 9h-2V7h2m0 10h-2v-6h2m-1-9A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2z"/></svg>`;
-const ICON_MORE = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2 2 2 0 0 1 2-2m0-6a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2 2 2 0 0 1 2-2m0-6a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2 2 2 0 0 1 2-2z"/></svg>`;
-const ICON_POWER = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.56 5.44l-1.45 1.45A6.97 6.97 0 0 1 17 12a5 5 0 0 1-5 5 5 5 0 0 1-5-5c0-2.04 1.1-3.8 2.71-4.77L8.27 5.79A8.97 8.97 0 0 0 5 12a7 7 0 0 0 7 7 7 7 0 0 0 7-7c0-2.57-1.36-4.81-3.44-6.11zM13 3h-2v10h2V3z"/></svg>`;
-const ICON_RESTART = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`;
-
-// ── Register ──────────────────────────────────────────────────────────────────
 customElements.define(CARD_TAG, PrinterCard3D);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: CARD_TAG,
   name: '3D Printer Card',
-  description: 'A feature-rich card for Moonraker-based 3D printers with animated SVG visualization.',
+  description: 'Dark, app-style card for Moonraker/Klipper printers: live drawing and cameras, progress, heaters, tuning, movement and macros. variant: compact gives a glance card.',
   preview: false,
 });
+
+console.info(`%c 3D-PRINTER-CARD %c v${CARD_VERSION} `, 'background:#4ade80;color:#06140b;font-weight:700', 'background:#161a22;color:#f2f3f5');

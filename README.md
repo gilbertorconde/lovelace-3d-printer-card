@@ -1,52 +1,48 @@
 # Lovelace 3D Printer Card for Home Assistant
 
-`lovelace-3d-printer-card` is a custom Lovelace card for monitoring and controlling **Moonraker/Klipper** 3D printers from Home Assistant. Single-file, zero dependencies, no build step.
+`lovelace-3d-printer-card` is a custom Lovelace card for monitoring and controlling **Moonraker/Klipper** 3D printers from Home Assistant. Single file, no dependencies, no build step.
 
-Key features at a glance:
+Version 3 is a dark, app-style redesign: everything you use during a print is on one page, and the old bottom sheets became folding sections.
 
-- **Animated SVG printer visualization** — i3, CoreXY, CoreXY Flying Gantry, and Cantilever styles; printed object builds up layer by layer
-- **Heater glow effect** — hotend, bed, and chamber glow in the SVG when a target temperature is set
-- **Message banner** — displays Klipper error/status messages, tinted with the current state color
-- **Live stats bar** — hotend temp, bed temp, extra heaters, speed factor, flow factor
-- **Progress arc** with layer count and filament used
-- **ETA and elapsed time** tiles
-- **Filename tile** with automatic thumbnail preview when printing/paused (shown only after confirming the feed returns a valid image; falls back to file icon otherwise)
-- **Print controls** — Pause / Resume / Cancel / Emergency Stop (double-tap required for E-Stop)
-- **Auto-discovery** — all entities crawled from `base_entity` prefix; no manual entity config required
-- **Macros sheet** — all `button.<base>_macro_*` buttons, auto-discovered
-- **Movement sheet** — XYZ position display, home buttons, jog grid, speed slider
-- **Misc sheet** — settable heaters with temperature inputs, fan/output sliders
-- **System sheet** (⋯ More) — firmware restart, host restart, server restart
-- **Camera section** — auto-discovered, collapsible, live streaming via `<ha-camera-stream>`
+- **Live view** — an animated drawing of the printer (i3, CoreXY, CoreXY flying gantry or cantilever) with the part growing layer by layer, heaters glowing while they have a target and the toolhead moving while printing. Tabs switch to each camera (live `<ha-camera-stream>`, with rotation)
+- **Progress** — file name with its thumbnail, percent, time left, finish time, elapsed time and layer
+- **Pause / Resume / Cancel** — Cancel needs a second tap. Emergency stop sits in the header and also needs two taps
+- **Temperatures** — a tile per heater with current and target. Tap a heater to set its target with + / − or presets (PLA / PETG / ABS by default)
+- **Tune** — speed and flow sliders, and 10-step drag bars for fans, filters and lights
+- **Move** — X/Y/Z position, homing, step sizes and a jog pad (disabled while printing)
+- **Macros** and **System** (Klipper, service and host restarts) as folding sections
+- **Message banner** for Klipper messages, tinted red on errors
+- **Smart plug** — `power_switch` adds a power button. Turning it off mid-print needs a second tap. With the plug off the card shows a Turn on button and the printer's lifetime totals, and the cameras keep working
+- **`variant: compact`** — a small glance card with progress and temperatures. "Full controls" opens the full card in a dialog
+- **Auto-discovery** — all entities are found from the `base_entity` prefix
+- Two columns when the card is wide, one column on a phone. The header never squashes its buttons
 - **Device author:** [gil](https://github.com/gilbertorconde) — 2026
 
 ---
 
 ## Screenshots
 
-| Main card (standby) | Main card (printing) |
-|:---:|:---:|
-| ![Card standby](screenshots/card-standby.png) | ![Card printing](screenshots/card-printing.png) |
-
-| Temperatures & progress | Cameras expanded |
-|:---:|:---:|
-| ![Card temps](screenshots/card-temps.png) | ![Card cameras](screenshots/card-cameras.png) |
-
-| Misc (temps & fans) |
+| Printing (wide), hotend target open |
 |:---:|
-| ![Misc sheet](screenshots/misc-temps-fans.png) |
+| ![Printing](screenshots/v3-desktop-printing.png) |
 
-| Macros |
-|:---:|
-| ![Macros sheet](screenshots/macros.png) |
-
-| Printer types: i3 | Printer types: Cantilever |
+| Phone width | Paused, with a Klipper message |
 |:---:|:---:|
-| ![i3 style](screenshots/card-i3.png) | ![Cantilever style](screenshots/card-cantilever.png) |
+| ![Phone](screenshots/v3-phone-printing.png) | ![Paused](screenshots/v3-paused-message.png) |
 
-| Printer types: CoreXY (printing) |
+| Smart plug off |
 |:---:|
-| ![CoreXY style](screenshots/card-corexy.png) |
+| ![Off](screenshots/v3-off.png) |
+
+| `variant: compact` printing | `variant: compact` off |
+|:---:|:---:|
+| ![Compact printing](screenshots/v3-compact-printing.png) | ![Compact off](screenshots/v3-compact-off.png) |
+
+| Printer types |
+|:---:|
+| ![Printer types](screenshots/v3-printer-types.png) |
+
+The screenshots use sample data.
 
 ---
 
@@ -118,6 +114,26 @@ entity_mappings: de_bambu_generic
 
 **Check the `entities/` folder** in the repo to see which mapping files are available (e.g. `en_generic.js`, `de_generic.js`, `de_bambu_generic.js`). Use the filename without `.js` as the value.
 
+**Compact glance card** (e.g. inside a room view), opening the full card in a dialog:
+
+```yaml
+type: custom:lovelace-3d-printer-card
+name: Voron 2.4
+base_entity: voron_24
+printer_type: corexy-flying-gantry
+power_switch: switch.printer_smart_plug
+variant: compact
+```
+
+**Your own temperature presets:**
+
+```yaml
+presets:
+  hotend: [{ name: PLA, value: 210 }, { name: ASA, value: 255 }]
+  bed: [60, 105]
+  number.voron_24_heater_chamber_target: [{ name: ABS, value: 50 }]
+```
+
 **With a smart plug power button:**
 
 ```yaml
@@ -139,6 +155,8 @@ power_switch: switch.printer_smart_plug
 | `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`, `de_bambu_generic`). Default: `{hass.locale}_generic` or `en_generic` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
+| `variant` | string | No | `full` (default) or `compact`: a glance card whose "Full controls" opens the full card in a dialog |
+| `presets` | map | No | Target presets per heater, keyed by `hotend`, `bed`, a heater's sensor or target entity ID, or its label. Each item is `{ name, value }` or a number. Defaults: hotend PLA 215 / PETG 245 / ABS 260, bed PLA 60 / PETG 80 / ABS 100 |
 
 ---
 
@@ -197,11 +215,11 @@ The card converts Moonraker units automatically: `print_duration` (min) and `pri
 
 ### Dynamic classification
 
-- **Macros** — `button.*_macro_*` → Macros sheet
-- **Temperature sensors** — `sensor.*` with unit `°C`/`°F`, not matched to a well-known role → paired with a `number.*_target` entity → Misc sheet as settable heater. Sensors with no matching target are read-only.
-- **Fans/outputs** — `number.*` matching `fan|filter|exhaust|output_pin`, not already claimed → Misc sheet as sliders
-- **Thumbnail** — `camera.*_thumbnail` → file tile thumbnail image (shown when state is `printing` or `paused`, only after the URL returns a valid image; falls back to file icon if the feed is empty or fails)
-- **Live cameras** — all other `camera.*` entities → collapsible camera section
+- **Macros** — `button.*_macro_*` → Macros section
+- **Temperature sensors** — `sensor.*` with unit `°C`/`°F`, not matched to a well-known role → paired with a `number.*_target` entity → a settable heater tile. Sensors with no matching target are read-only tiles.
+- **Fans/outputs** — `number.*` matching `fan|filter|exhaust|output_pin|light|led`, not already claimed → drag bars in Tune
+- **Thumbnail** — `camera.*_thumbnail` → the progress block's thumbnail (shown when state is `printing` or `paused`, only after the URL returns a valid image; falls back to file icon if the feed is empty or fails)
+- **Live cameras** — all other `camera.*` entities → live-view tabs
 
 ### Labels
 
@@ -209,28 +227,24 @@ Display labels always come from the entity's `friendly_name` attribute, with the
 
 ---
 
-## Sheets (bottom panels)
+## Layout
 
-### Macros
-Opened via **Macros**. All `button.<base>_macro_*` entities, sorted alphabetically. Hidden if none found.
+From top to bottom (the second column starts at Temperatures when the card is at least 700 px wide):
 
-### Movement
-Opened via **Move**. Shown when any home button or position sensor exists.
-- **Position bar** — live X/Y/Z readout
-- **Home buttons** — Home All / X / Y / Z (shown individually based on availability)
-- **Jog grid** — X/Y cross grid and Z column with ±0.1/1/10/100 mm increments (disabled while printing)
-- **Speed slider** — speed factor entity
+- **Header** — name, state and layer, state pill (hidden on narrow cards), emergency stop, power, and a close button in the compact variant's dialog
+- **Message banner** — `current_print_message` / `current_display_message`, hidden when empty
+- **Live view** — printer drawing and camera tabs
+- **Progress** — shown while printing or paused, and after a print completes or is cancelled
+- **Pause / Resume / Cancel**
+- **Temperatures** — hotend, bed, then other heaters (settable first), then read-only sensors
+- **Tune** — speed factor, flow factor, fans and outputs. Folds into a section on narrow cards
+- **Move** — position, Home All / X / Y / Z, step size (0.1 / 1 / 10 / 100 mm; Z moves at most 10 mm), jog pad. Disabled while printing (allowed while paused)
+- **Macros** — `button.<base>_macro_*`, sorted. Disabled while printing
+- **System** — Klipper Control (Restart Klipper, Firmware Restart), Service Control (`button.*_restart_*` and similar), Host Control (Server Restart, Reboot Host, Shutdown Host; the last two need a second tap)
 
 Jog moves are sent via `moonraker.send_gcode` or `klipper.send_gcode` (G91 relative move, then G90). Falls back to `script.<base>_jog` with `{ axis, distance }` variables.
 
-### Misc
-Opened via **Misc**. Shows hotend, bed, and any extra discovered heaters with editable temperature inputs, plus fan/output sliders. Hidden if no heaters or fans are found.
-
-### System (⋯ More)
-Opened via **More**. Only shown when any system restart entities are discovered. Grouped into three sections matching Mainsail's power panel:
-- **Klipper Control** — Restart Klipper, Firmware Restart
-- **Service Control** — auto-discovered `button.*_restart_*` entities (KlipperScreen, Moonraker, Crowsnest, Mobileraker, etc.)
-- **Host Control** — Server Restart, Reboot Host, Shutdown Host (danger-styled)
+With the plug off (or Moonraker unreachable) the card shows only the header, an off/offline block with **Turn on** and, when the sensors are available, totals from `sensor.<base>_totals_jobs`, `_totals_print_time` and `_totals_filament_used`, plus the cameras.
 
 ---
 
@@ -247,7 +261,7 @@ Opened via **More**. Only shown when any system restart entities are discovered.
 
 ## Cameras
 
-Cameras are fully auto-discovered from `camera.*<base>*` entities (the thumbnail camera is excluded). The section collapses to zero height when closed. Streams use HA's native `<ha-camera-stream>` element (MJPEG, HLS, WebRTC).
+Cameras are fully auto-discovered from `camera.*<base>*` entities (the thumbnail camera is excluded) and appear as tabs in the live view. Only the selected camera streams, through HA's native `<ha-camera-stream>` element (MJPEG, HLS, WebRTC).
 
 The `cameras:` config array is only needed to specify rotation angles. Unspecified cameras default to `rotate: 0`.
 
@@ -289,14 +303,30 @@ The card relies on entity mapping files to discover printer entities and transla
 
 2. Copy `en_generic.js` as a starting point (use `export default { ... }`), then add or adjust the suffixes for your integration's entity IDs (e.g. BambuLab uses `verbleibende_zeit` for ETA in German).
 
-3. Add UI translations in the `"ui"` object for buttons, labels, and section headers (e.g. "Pause", "Macros", "Temperatures"). Entity-derived labels use HA `friendly_name` and need no translation.
+3. Add UI translations in the `ui` object for buttons, labels, and section headers (e.g. "Pause", "Macros", "Temperatures"). Entity-derived labels use HA `friendly_name` and need no translation.
 
 4. Submit a PR with the new file and a short note in the PR description.
 
 ---
 
+## Changelog
+
+**3.0.0**
+- New dark, app-style design. The bottom sheets are gone: Tune, Move, Macros and System are folding sections, and the layout is two columns when wide and one on a phone.
+- New: camera tabs in the live view instead of a collapsible camera list. Only the selected camera streams, and streams are no longer rebuilt on state updates.
+- New: tap a heater to set its target with + / − and presets (`presets` option).
+- New: speed and flow drag sliders, and 10-step drag bars for fans and outputs.
+- New: `variant: compact` glance card with a Full controls dialog.
+- New: off and offline states with a Turn on button and lifetime totals.
+- Cancel, host reboot/shutdown, and turning the plug off mid-print now need a second tap.
+- Redrawn printer drawings for all four printer types; the toolhead animation no longer redraws the drawing every frame.
+- Updates only re-render the parts of the card that changed, so drags and open sections aren't interrupted.
+- Icons are inlined, so no icon font is needed.
+
+---
+
 ## Requirements
 
-- Home Assistant 2023.4 or newer
+- Home Assistant 2023.4 or newer (a browser with CSS container queries)
 - Moonraker integration installed and printer entities exposed to HA
 - No additional HACS frontend cards required
