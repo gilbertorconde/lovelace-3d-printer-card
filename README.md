@@ -311,6 +311,9 @@ The card relies on entity mapping files to discover printer entities and transla
 
 ## Changelog
 
+**3.0.1**
+- Fixed: the compact card's dialog no longer closes by itself when the dashboard redraws (for example right after you change a setting).
+
 **3.0.0**
 - New dark, app-style design. The bottom sheets are gone: Tune, Move, Macros and System are folding sections, and the layout is two columns when wide and one on a phone.
 - New: camera tabs in the live view instead of a collapsible camera list. Only the selected camera streams, and streams are no longer rebuilt on state updates.

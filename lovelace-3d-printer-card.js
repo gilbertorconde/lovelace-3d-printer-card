@@ -1,5 +1,5 @@
 // =============================================================================
-// Lovelace 3D Printer Card  v3.0.0
+// Lovelace 3D Printer Card  v3.0.1
 // Dark, app-style card for Moonraker/Klipper printers (and others whose
 // entities follow the same naming), with live printer drawing and cameras.
 //
@@ -14,7 +14,7 @@
 // =============================================================================
 
 const CARD_TAG = 'lovelace-3d-printer-card';
-const CARD_VERSION = '3.0.0';
+const CARD_VERSION = '3.0.1';
 
 // ── Default entity mappings (fallback when the mapping file can't load) ──────
 const DEFAULT_MAPPINGS = {
@@ -446,8 +446,13 @@ class PrinterCard3D extends HTMLElement {
   }
 
   disconnectedCallback() {
-    this._closeDialog();
-    clearTimeout(this._confirmTimer);
+    // Dashboards that redraw (gil-home's room sheet) detach and re-attach the
+    // card in one go; only close the dialog if the card is really gone.
+    setTimeout(() => {
+      if (this.isConnected) return;
+      this._closeDialog();
+      clearTimeout(this._confirmTimer);
+    }, 0);
   }
 
   _resolveEntityMappingsKey() {
