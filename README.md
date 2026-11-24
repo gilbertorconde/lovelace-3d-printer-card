@@ -242,6 +242,8 @@ From top to bottom (the second column starts at Temperatures when the card is at
 - **Macros** — `button.<base>_macro_*`, sorted. Disabled while printing
 - **System** — Klipper Control (Restart Klipper, Firmware Restart), Service Control (`button.*_restart_*` and similar), Host Control (Server Restart, Reboot Host, Shutdown Host; the last two need a second tap)
 
+Readings that come from an entity (temperatures, progress, times, layer, filament, speed/flow/fan values, position, totals) open Home Assistant's more-info dialog with the entity's history when tapped. Controls keep their own action.
+
 Jog moves are sent via `moonraker.send_gcode` or `klipper.send_gcode` (G91 relative move, then G90). Falls back to `script.<base>_jog` with `{ axis, distance }` variables.
 
 With the plug off (or Moonraker unreachable) the card shows only the header, an off/offline block with **Turn on** and, when the sensors are available, totals from `sensor.<base>_totals_jobs`, `_totals_print_time` and `_totals_filament_used`, plus the cameras.
@@ -310,6 +312,10 @@ The card relies on entity mapping files to discover printer entities and transla
 ---
 
 ## Changelog
+
+**3.1.0**
+- New: tap a reading to open Home Assistant's more-info dialog with its history graph: temperatures, progress, time left, finish time, elapsed time, layer, filament used, speed, flow, fans and outputs, toolhead position, and the lifetime totals. Works in the compact card and its dialog too; keyboard users can focus a reading and press Enter or Space.
+- A settable heater's tile still opens its target setter. Its current temperature is repeated in the setter row; tap it there for the history.
 
 **3.0.1**
 - Fixed: the compact card's dialog no longer closes by itself when the dashboard redraws (for example right after you change a setting).

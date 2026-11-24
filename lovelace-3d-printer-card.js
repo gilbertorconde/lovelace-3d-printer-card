@@ -1,5 +1,5 @@
 // =============================================================================
-// Lovelace 3D Printer Card  v3.0.1
+// Lovelace 3D Printer Card  v3.1.0
 // Dark, app-style card for Moonraker/Klipper printers (and others whose
 // entities follow the same naming), with live printer drawing and cameras.
 //
@@ -14,7 +14,7 @@
 // =============================================================================
 
 const CARD_TAG = 'lovelace-3d-printer-card';
-const CARD_VERSION = '3.0.1';
+const CARD_VERSION = '3.1.0';
 
 // ── Default entity mappings (fallback when the mapping file can't load) ──────
 const DEFAULT_MAPPINGS = {
@@ -394,7 +394,11 @@ class PrinterCard3D extends HTMLElement {
     this._thumbOk = false;
     this._dlg = null;           // compact variant: { wrap, card }
     this._host = null;          // compact card that opened this one as a dialog
-    this._onKey = (ev) => { if (ev.key === 'Escape') this._closeDialog(); };
+    // Escape in a more-info dialog opened from our dialog closes only that one.
+    this._onKey = (ev) => {
+      if (ev.key !== 'Escape' || ev.composedPath().some((n) => n.localName === 'ha-more-info-dialog')) return;
+      this._closeDialog();
+    };
   }
 
   static getStubConfig() {
@@ -657,6 +661,17 @@ class PrinterCard3D extends HTMLElement {
     return printState || printerState || 'idle';
   }
 
+  // Markup that makes a reading open Home Assistant's more-info dialog (with its
+  // history graph) for the entity behind it; nothing when that entity is missing.
+  _mi(id) {
+    return id && this._hass?.states[id] ? ` data-more-info="${esc(id)}" role="button" tabindex="0"` : '';
+  }
+
+  _miSpan(id, html) {
+    const a = this._mi(id);
+    return a ? `<span${a}>${html}</span>` : html;
+  }
+
   _statusLabel(status) {
     const k = 'st_' + status;
     const t = this._t(k);
@@ -673,7 +688,8 @@ class PrinterCard3D extends HTMLElement {
     let progress = this._numVal('progress') || 0;
     if (progress > 0 && progress <= 1 && attrVal(this._hass, this._entities.progress, 'unit_of_measurement') !== '%') progress *= 100;
     const duration = durationVal(this._hass, this._entities.duration);
-    let eta = durationVal(this._hass, this._entities.eta);
+    const etaRaw = durationVal(this._hass, this._entities.eta);
+    let eta = etaRaw;
     if (!eta && duration != null && progress > 0) eta = duration / (progress / 100) - duration;
     const filRaw = this._numVal('filament_used');
     const filUnit = attrVal(this._hass, this._entities.filament_used, 'unit_of_measurement');
@@ -685,6 +701,8 @@ class PrinterCard3D extends HTMLElement {
       color: stateColor(status),
       progress,
       duration, eta,
+      // An ETA worked out from elapsed time and progress has no single entity behind it.
+      etaId: etaRaw ? this._entities.eta : null,
       filament,
       filename: this._stVal('filename'),
       layer: this._numVal('current_layer'),
@@ -694,6 +712,7 @@ class PrinterCard3D extends HTMLElement {
       bed: this._numVal('bed'),
       bedTarget: this._num(this._entities.bed_target),
       chamber: chamber?.current ?? null,
+      chamberId: chamber?.entity_id ?? null,
       chamberTarget: this._num(this._entities.chamber_target) ?? (chamber?.target_entity ? this._num(chamber.target_entity) : null),
     };
   }
@@ -736,6 +755,7 @@ class PrinterCard3D extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     const r = this.shadowRoot;
     r.addEventListener('click', (e) => this._onClick(e));
+    r.addEventListener('keydown', (e) => this._onKeyDown(e));
     r.addEventListener('pointerdown', (e) => this._onPointerDown(e));
     // <details> toggles don't bubble; capture them to remember which sections are open.
     r.addEventListener('toggle', (e) => {
@@ -792,14 +812,22 @@ class PrinterCard3D extends HTMLElement {
     const powerOn = this._powerOn();
 
     // Header
+    const E = this._entities;
     let sub;
-    if (s.status === 'off') sub = t('powered_off');
-    else if (s.status === 'offline') sub = t('offline');
-    else if (s.active) sub = `${s.label} · ${s.layer != null && s.layers ? `${t('layer')} ${Math.round(s.layer)} / ${Math.round(s.layers)}` : `${pct}%`}`;
-    else sub = [s.label, s.hotend != null ? `${t('hotend')} ${Math.round(s.hotend)}°` : '', s.bed != null ? `${t('bed')} ${Math.round(s.bed)}°` : ''].filter(Boolean).join(' · ');
+    if (s.status === 'off') sub = esc(t('powered_off'));
+    else if (s.status === 'offline') sub = esc(t('offline'));
+    else if (s.active) {
+      sub = `${esc(s.label)} · ${s.layer != null && s.layers
+        ? this._miSpan(E.current_layer, esc(`${t('layer')} ${Math.round(s.layer)} / ${Math.round(s.layers)}`))
+        : this._miSpan(E.progress, `${pct}%`)}`;
+    } else {
+      sub = [esc(s.label),
+        s.hotend != null ? this._miSpan(E.hotend, esc(`${t('hotend')} ${Math.round(s.hotend)}°`)) : '',
+        s.bed != null ? this._miSpan(E.bed, esc(`${t('bed')} ${Math.round(s.bed)}°`)) : ''].filter(Boolean).join(' · ');
+    }
     const armedE = this._confirm === 'emergency';
     const head = `<div class="ic">${ico(s.active ? 'printer3d-nozzle' : 'printer3d', 22)}</div>
-    <div class="tt"><h3>${esc(name)}</h3><p>${esc(sub)}</p></div>
+    <div class="tt"><h3>${esc(name)}</h3><p>${sub}</p></div>
     <div class="sp"></div>
     <span class="pill"><i></i>${esc(s.label)}</span>
     ${this._exists('emergency') && !s.offLike ? `<button class="iconbtn danger ${armedE ? 'armed' : ''}" data-action="emergency" title="${esc(armedE ? t('estop_armed') : t('estop'))}" aria-label="${esc(t('estop'))}">${ico('alert-octagon-outline')}</button>` : ''}
@@ -817,7 +845,7 @@ class PrinterCard3D extends HTMLElement {
     // Off / offline block
     let off = '';
     if (s.offLike) {
-      const totals = this._totals().map(([k, v]) => `<div class="fact"><span>${esc(t(k))}</span><b>${esc(v)}</b></div>`).join('');
+      const totals = this._totals().map(([k, v, id]) => `<div class="fact"${this._mi(id)}><span>${esc(t(k))}</span><b>${esc(v)}</b></div>`).join('');
       off = `<div class="offhero"><div class="offart">${printerSvg(cfg.printer_type, { p: 0 })}</div>
         <p>${esc(s.status === 'off' ? t('plug_off') : t('offline_msg'))}</p>
         ${s.status === 'off' && powerId ? `<button class="big go" data-action="toggle-power">${ico('power')}${esc(t('turn_on'))}</button>` : ''}
@@ -841,16 +869,18 @@ class PrinterCard3D extends HTMLElement {
     const showProg = s.active || ((s.status === 'complete' || s.status === 'cancelled') && s.filename);
     if (showProg) {
       const facts = [];
-      if (s.active && s.eta != null) facts.push([t('left'), fmtSeconds(s.eta)]);
-      if (s.active && s.eta) facts.push([t('done_at'), fmtClock(s.eta, this._hass?.locale)]);
-      if (s.duration != null) facts.push([t('elapsed'), fmtSeconds(s.duration)]);
-      if (s.layer != null && s.layers) facts.push([t('layer'), `${Math.round(s.layer)} / ${Math.round(s.layers)}`]);
+      if (s.active && s.eta != null) facts.push([t('left'), fmtSeconds(s.eta), s.etaId]);
+      if (s.active && s.eta) facts.push([t('done_at'), fmtClock(s.eta, this._hass?.locale), s.etaId]);
+      if (s.duration != null) facts.push([t('elapsed'), fmtSeconds(s.duration), E.duration]);
+      if (s.layer != null && s.layers) facts.push([t('layer'), `${Math.round(s.layer)} / ${Math.round(s.layers)}`, E.current_layer]);
       const file = (s.filename || '').replace(/\.gcode$/i, '');
-      const fsub = s.active ? (s.filament != null ? `${s.filament.toFixed(1)} m ${t('filament_used')}` : s.label) : s.label;
+      const fsub = s.active && s.filament != null
+        ? this._miSpan(E.filament_used, esc(`${s.filament.toFixed(1)} m ${t('filament_used')}`))
+        : esc(s.label);
       prog = `<div class="prog">
-        <div class="top"><div class="thumb">${ico('file-outline', 28)}</div><div class="fn"><b title="${esc(file)}">${esc(file || '—')}</b><small>${esc(fsub)}</small></div><div class="pct">${pct}<sup>%</sup></div></div>
+        <div class="top"><div class="thumb">${ico('file-outline', 28)}</div><div class="fn"><b title="${esc(file)}">${esc(file || '—')}</b><small>${fsub}</small></div><div class="pct"${this._mi(E.progress)}>${pct}<sup>%</sup></div></div>
         <div class="bar"><i style="width:${clamp(s.progress, 0, 100)}%"></i></div>
-        ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div class="fact"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+        ${facts.length ? `<div class="facts">${facts.map(([k, v, id]) => `<div class="fact"${this._mi(id)}><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
       </div>`;
     }
     this._updateThumb(s);
@@ -885,16 +915,18 @@ class PrinterCard3D extends HTMLElement {
   _totals() {
     const b = this._config.base_entity;
     const out = [];
-    const jobs = numVal(this._hass, `sensor.${b}_totals_jobs`);
-    if (jobs != null) out.push(['prints', Math.round(jobs).toLocaleString()]);
+    const jobsId = `sensor.${b}_totals_jobs`;
+    const jobs = numVal(this._hass, jobsId);
+    if (jobs != null) out.push(['prints', Math.round(jobs).toLocaleString(), jobsId]);
     const timeId = `sensor.${b}_totals_print_time`;
     const secs = durationVal(this._hass, timeId);
-    if (secs != null) out.push(['print_time', `${Math.round(secs / 3600).toLocaleString()} h`]);
-    const fil = numVal(this._hass, `sensor.${b}_totals_filament_used`);
+    if (secs != null) out.push(['print_time', `${Math.round(secs / 3600).toLocaleString()} h`, timeId]);
+    const filId = `sensor.${b}_totals_filament_used`;
+    const fil = numVal(this._hass, filId);
     if (fil != null) {
-      const unit = attrVal(this._hass, `sensor.${b}_totals_filament_used`, 'unit_of_measurement');
+      const unit = attrVal(this._hass, filId, 'unit_of_measurement');
       const m = unit === 'mm' ? fil / 1000 : fil;
-      out.push(['filament', m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`]);
+      out.push(['filament', m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`, filId]);
     }
     return out;
   }
@@ -902,12 +934,12 @@ class PrinterCard3D extends HTMLElement {
   // Heater tiles. Tapping a settable one opens its target setter below its row.
   _heaterList(s) {
     const list = [];
-    if (this._exists('hotend')) list.push({ key: 'hotend', label: this._t('hotend'), icon: 'printer3d-nozzle-heat', color: 'var(--hot)', cur: s.hotend, targetId: this._entities.hotend_target, maxDef: 300 });
-    if (this._exists('bed')) list.push({ key: 'bed', label: this._t('bed'), icon: 'radiator', color: 'var(--bed)', cur: s.bed, targetId: this._entities.bed_target, maxDef: 120 });
+    if (this._exists('hotend')) list.push({ key: 'hotend', entity: this._entities.hotend, label: this._t('hotend'), icon: 'printer3d-nozzle-heat', color: 'var(--hot)', cur: s.hotend, targetId: this._entities.hotend_target, maxDef: 300 });
+    if (this._exists('bed')) list.push({ key: 'bed', entity: this._entities.bed, label: this._t('bed'), icon: 'radiator', color: 'var(--bed)', cur: s.bed, targetId: this._entities.bed_target, maxDef: 120 });
     for (const h of this._heaters) {
       const cham = /chamber/i.test(h.entity_id);
       list.push({
-        key: h.entity_id, label: h.label,
+        key: h.entity_id, entity: h.entity_id, label: h.label,
         icon: h.readonly ? 'chip' : cham ? 'heat-wave' : 'thermometer',
         color: h.readonly ? 'var(--text3)' : cham ? 'var(--cham)' : 'var(--amber)',
         cur: h.current, targetId: h.target_entity, maxDef: 100,
@@ -938,16 +970,18 @@ class PrinterCard3D extends HTMLElement {
       const v = `<span class="v">${x.cur != null ? Math.round(x.cur) + '°' : '—'}${tgt > 0 ? `<small>/ ${Math.round(tgt)}°</small>` : x.targetId ? `<small>${esc(t('off'))}</small>` : ''}</span>`;
       const inner = `<span class="n">${ico(x.icon, 14)}<span>${esc(x.label)}</span></span>${v}${x.targetId ? `<span class="tb"><i style="width:${fill.toFixed(1)}%"></i>${mark != null ? `<em style="left:${mark.toFixed(1)}%"></em>` : ''}</span>` : ''}`;
       const cls = `t ${tgt > 0 ? 'heat' : ''} ${this._sel === x.key ? 'sel' : ''} ${x.targetId ? '' : 'ro'}`;
+      // A settable tile is the setter's toggle, so its reading opens history from the setter row instead.
       return settable(x)
         ? `<button class="${cls}" style="--tc:${x.color}" data-action="sel-heater" data-key="${esc(x.key)}">${inner}</button>`
-        : `<div class="${cls}" style="--tc:${x.color}">${inner}</div>`;
+        : `<div class="${cls}" style="--tc:${x.color}"${this._mi(x.entity)}>${inner}</div>`;
     });
     const idx = list.findIndex((x) => x.key === this._sel);
     if (idx >= 0) {
       const x = list[idx];
       const tgt = this._num(x.targetId) || 0;
       const presets = this._presetsFor(x);
-      const setter = `<div class="setter"><span class="lbl"><b>${esc(x.label)}</b> ${esc(t('target'))}</span>
+      const now = x.cur != null ? `<span class="now"${this._mi(x.entity)}>${Math.round(x.cur)}°</span> · ` : '';
+      const setter = `<div class="setter"><span class="lbl"><b>${esc(x.label)}</b> ${now}${esc(t('target'))}</span>
         <button class="step" data-action="heat-step" data-dir="-1" aria-label="-">${ico('minus', 20)}</button><span class="val">${tgt > 0 ? Math.round(tgt) + '°' : esc(t('off'))}</span><button class="step" data-action="heat-step" data-dir="1" aria-label="+">${ico('plus', 20)}</button>
         <div class="presets"><button class="chip ${tgt <= 0 ? 'on' : ''}" data-action="heat-set" data-val="0">${esc(t('off'))}</button>${presets.map((p) => `<button class="chip ${Math.round(tgt) === Math.round(p.value) ? 'on' : ''}" data-action="heat-set" data-val="${p.value}">${esc(p.name ? `${p.name} ${p.value}` : `${p.value}°`)}</button>`).join('')}</div></div>`;
       tiles.splice(Math.min(list.length, Math.floor(idx / 3) * 3 + 3), 0, setter);
@@ -969,7 +1003,7 @@ class PrinterCard3D extends HTMLElement {
       const step = parseFloat(attrVal(this._hass, id, 'step')) || 1;
       const f = v != null ? clamp((v - min) / (max - min), 0, 1) * 100 : 0;
       const mid = clamp((100 - min) / (max - min), 0, 1) * 100;
-      items.push(`<div class="sl" style="--sc:var(--blue)"><div class="h"><span>${esc(lbl)}</span><b class="dv">${v != null ? Math.round(v) + '%' : '—'}</b></div>
+      items.push(`<div class="sl" style="--sc:var(--blue)"><div class="h"><span>${esc(lbl)}</span><b class="dv"${this._mi(id)}>${v != null ? Math.round(v) + '%' : '—'}</b></div>
         <div class="track ${v == null ? 'dis' : ''}" data-drag="track" data-entity="${id}" data-min="${min}" data-max="${max}" data-step="${step}" data-unit="%"><i style="width:${f.toFixed(1)}%"></i><span class="mid" style="left:${mid.toFixed(1)}%"></span></div></div>`);
     };
     track('speed_factor', this._t('speed'), 10, 200);
@@ -979,7 +1013,7 @@ class PrinterCard3D extends HTMLElement {
       const f = fan.max > fan.min ? clamp((v - fan.min) / (fan.max - fan.min), 0, 1) : 0;
       const lit = Math.round(f * 10);
       const color = /light|led/i.test(fan.entity_id) ? 'var(--amber)' : 'var(--fan)';
-      items.push(`<div class="sl" style="--sc:${color}"><div class="h"><span>${esc(fan.label)}</span><b class="dv">${this._fanText(fan, v)}</b></div>
+      items.push(`<div class="sl" style="--sc:${color}"><div class="h"><span>${esc(fan.label)}</span><b class="dv"${this._mi(fan.entity_id)}>${this._fanText(fan, v)}</b></div>
         <div class="bars ${fan.unavailable ? 'dis' : ''}" data-drag="bars" data-entity="${fan.entity_id}" data-min="${fan.min}" data-max="${fan.max}" data-step="${fan.step}" data-unit="${esc(fan.unit)}">${Array.from({ length: 10 }, (_, i) => `<span class="${i < lit ? 'on' : ''}" style="height:${30 + i * 7}%"></span>`).join('')}</div></div>`);
     }
     return items;
@@ -1012,12 +1046,12 @@ class PrinterCard3D extends HTMLElement {
     const x = this._numVal('position_x'), y = this._numVal('position_y'), z = this._numVal('position_z');
     if (!hasHome && x == null && !this._exists('position_x')) return '';
     const dis = s.printing ? 'disabled' : '';
-    const pos = [['X', x, 1], ['Y', y, 1], ['Z', z, 2]];
+    const pos = [['X', x, 1, 'position_x'], ['Y', y, 1, 'position_y'], ['Z', z, 2, 'position_z']];
     const small = pos.filter(([, v]) => v != null).map(([a, v, d]) => `${a} ${v.toFixed(d)}`).join(' · ');
     const step = this._jogStep;
     const jb = (axis, dir, icon) => `<button data-action="jog" data-axis="${axis}" data-dir="${dir}" ${dis} aria-label="${axis}${dir > 0 ? '+' : '-'}">${ico(icon, 20)}</button>`;
     const body = `
-      ${small ? `<div class="pos">${pos.map(([a, v, d]) => `<div><span>${a}</span><b>${v != null ? v.toFixed(d) : '—'}</b></div>`).join('')}</div>` : ''}
+      ${small ? `<div class="pos">${pos.map(([a, v, d, k]) => `<div${this._mi(this._entities[k])}><span>${a}</span><b>${v != null ? v.toFixed(d) : '—'}</b></div>`).join('')}</div>` : ''}
       <div class="mrow"><span class="label">${esc(this._t('home'))}</span><div class="chips">
         ${this._exists('home_all') ? `<button class="chip" data-action="home" data-axis="all" ${dis}>${ico('home', 15)}${esc(this._t('home_all'))}</button>` : ''}
         ${['x', 'y', 'z'].filter((a) => this._exists('home_' + a)).map((a) => `<button class="chip" data-action="home" data-axis="${a}" ${dis}>${a.toUpperCase()}</button>`).join('')}
@@ -1138,18 +1172,20 @@ class PrinterCard3D extends HTMLElement {
     else if (s.paused && this._exists('resume')) act = `<button class="iconbtn" data-action="resume" title="${esc(t('resume'))}">${ico('play')}</button>`;
     else if (cfg.power_switch && !s.active) act = `<button class="toggle ${powerOn ? 'on' : ''}" data-action="toggle-power" aria-label="Power"></button>`;
     const file = (s.filename || '').replace(/\.gcode$/i, '');
+    const E = this._entities;
     const sub = s.active
-      ? [file, s.eta ? `${t('done_at')} ${fmtClock(s.eta, this._hass?.locale)}` : ''].filter(Boolean).join(' · ')
-      : s.status === 'off' ? t('powered_off') : s.status === 'offline' ? t('offline') : s.label;
-    const main = `<div class="gh"><div class="gi">${ico(s.active ? 'printer3d-nozzle' : 'printer3d', 24)}</div><div class="gt"><b>${esc(name)}${s.active ? ` · ${pct}%` : ''}</b><small>${esc(sub)}</small></div>${act}</div>`;
+      ? [esc(file), s.eta ? this._miSpan(s.etaId, esc(`${t('done_at')} ${fmtClock(s.eta, this._hass?.locale)}`)) : ''].filter(Boolean).join(' · ')
+      : esc(s.status === 'off' ? t('powered_off') : s.status === 'offline' ? t('offline') : s.label);
+    const main = `<div class="gh"><div class="gi">${ico(s.active ? 'printer3d-nozzle' : 'printer3d', 24)}</div><div class="gt"><b>${esc(name)}${s.active ? ` · ${this._miSpan(E.progress, `${pct}%`)}` : ''}</b><small>${sub}</small></div>${act}</div>`;
     const bar = s.active ? `<div class="bar"><i style="width:${clamp(s.progress, 0, 100)}%"></i></div>` : '';
     const temps = s.offLike ? '' : `<div class="gtemps">
-      ${s.hotend != null ? `<span>${ico('printer3d-nozzle-heat', 15)}${Math.round(s.hotend)}°</span>` : ''}
-      ${s.bed != null ? `<span class="b">${ico('radiator', 15)}${Math.round(s.bed)}°</span>` : ''}
-      ${s.chamber != null ? `<span class="c">${ico('heat-wave', 15)}${Math.round(s.chamber)}°</span>` : ''}
-      ${s.active && s.layer != null && s.layers ? `<span class="r">${esc(t('layer'))} ${Math.round(s.layer)} / ${Math.round(s.layers)}</span>` : ''}</div>`;
-    const left = s.active && s.eta != null ? `${t('left')} ${fmtSeconds(s.eta)}` : s.status === 'off' ? t('plug_off') : '';
-    const foot = `<div class="foot"><span>${esc(left)}</span><button class="link" data-action="open-dialog">${esc(t('full_controls'))} ${ico('chevron-right', 16)}</button></div>`;
+      ${s.hotend != null ? `<span${this._mi(E.hotend)}>${ico('printer3d-nozzle-heat', 15)}${Math.round(s.hotend)}°</span>` : ''}
+      ${s.bed != null ? `<span class="b"${this._mi(E.bed)}>${ico('radiator', 15)}${Math.round(s.bed)}°</span>` : ''}
+      ${s.chamber != null ? `<span class="c"${this._mi(s.chamberId)}>${ico('heat-wave', 15)}${Math.round(s.chamber)}°</span>` : ''}
+      ${s.active && s.layer != null && s.layers ? `<span class="r"${this._mi(E.current_layer)}>${esc(t('layer'))} ${Math.round(s.layer)} / ${Math.round(s.layers)}</span>` : ''}</div>`;
+    const showLeft = s.active && s.eta != null;
+    const left = showLeft ? `${t('left')} ${fmtSeconds(s.eta)}` : s.status === 'off' ? t('plug_off') : '';
+    const foot = `<div class="foot"><span${showLeft ? this._mi(s.etaId) : ''}>${esc(left)}</span><button class="link" data-action="open-dialog">${esc(t('full_controls'))} ${ico('chevron-right', 16)}</button></div>`;
     return { cls: `card glance st-${s.status}`, color: s.color, regions: { 'g-main': main, 'g-bar': bar, 'g-temps': temps, 'g-foot': foot } };
   }
 
@@ -1219,9 +1255,34 @@ class PrinterCard3D extends HTMLElement {
     this._sendTimers[eid] = setTimeout(() => this._call('number', 'set_value', { entity_id: eid, value }), delay);
   }
 
+  _moreInfo(entityId) {
+    if (entityId) this._fire('hass-more-info', { entityId });
+  }
+
+  // Path inside this card only; a dialog card's events continue up to document.body.
+  _ownPath(e) {
+    const path = e.composedPath();
+    const end = path.indexOf(this.shadowRoot);
+    return end >= 0 ? path.slice(0, end) : path;
+  }
+
+  _onKeyDown(e) {
+    if ((e.key !== 'Enter' && e.key !== ' ') || e.repeat) return;
+    const id = e.target?.dataset?.moreInfo;
+    if (!id) return;
+    e.preventDefault();
+    this._moreInfo(id);
+  }
+
   _onClick(e) {
-    const el = e.composedPath().find((n) => n instanceof Element && n.dataset?.action);
-    if (!el || el.disabled) return;
+    const path = this._ownPath(e);
+    const el = path.find((n) => n instanceof Element && n.dataset?.action);
+    if (!el) {
+      const mi = path.find((n) => n instanceof Element && n.dataset?.moreInfo);
+      if (mi) this._moreInfo(mi.dataset.moreInfo);
+      return;
+    }
+    if (el.disabled) return;
     const a = el.dataset.action;
     const status = this._effectiveStatus();
     const nav = ['open-dialog', 'close-dialog', 'tab', 'toggle-power', 'sel-heater', 'jog-step'];
@@ -1352,6 +1413,13 @@ class PrinterCard3D extends HTMLElement {
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 button:disabled { cursor: default; opacity: .38; }
 .i { fill: currentColor; flex-shrink: 0; display: block; }
+/* readings that open the entity's history: unchanged at rest */
+[data-more-info] { cursor: pointer; text-underline-offset: 3px; }
+[data-more-info]:focus { outline: none; }
+@media (hover: hover) { [data-more-info]:not(.fact, .t, .pos > div):hover { text-decoration: underline dotted color-mix(in srgb, currentColor 50%, transparent); } }
+[data-more-info]:not(.fact, .t, .pos > div):focus-visible { text-decoration: underline solid color-mix(in srgb, var(--mc, #8aa2ff) 80%, transparent); background-color: rgba(255,255,255,.08); border-radius: 4px; }
+@media (hover: hover) { :is(.fact, .t, .pos > div)[data-more-info]:hover { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); } }
+:is(.fact, .t, .pos > div)[data-more-info]:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mc, #8aa2ff) 70%, transparent); }
 .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); font-weight: 600; }
 
 .card { background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), var(--bg2); border: 1px solid var(--line); border-radius: 30px; overflow: hidden; user-select: none; -webkit-user-select: none; }
