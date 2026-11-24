@@ -185,7 +185,7 @@ power_switch: switch.printer_smart_plug
 | `name` | string | No | Display name shown in the card header |
 | `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, `cantilever`, or `delta` |
 | `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`, `de_bambu_generic`), or the built-in `octoprint`. Default: `octoprint` when OctoPrint entities are detected, else `{hass.locale}_generic` or `en_generic` |
-| `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
+| `cameras` | list | No | Array of `{ entity, rotate, aspect }` overrides: rotation in degrees, aspect ratio such as `4:3` (default `16:9`) |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
 | `view` | string | No | Starting live view: `printer` (default), `both` (drawing above the camera) or `camera`. The toggle under the view switches it, and the choice is remembered per browser |
 | `variant` | string | No | `full` (default) or `compact`: a glance card whose "Full controls" opens the full card in a dialog |
