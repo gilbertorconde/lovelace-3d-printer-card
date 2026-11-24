@@ -1,0 +1,138 @@
+# OctoPrint G-code controls for lovelace-3d-printer-card (base_entity: octoprint).
+# Put this file in /config/packages/ and enable packages in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+# Replace OCTOPRINT_HOST, and add octoprint_api_key to secrets.yaml.
+# Uses octoprint_api_key from secrets.yaml. Delete this file to remove everything it adds.
+
+rest_command:
+  octoprint_gcode:
+    url: "http://OCTOPRINT_HOST/api/printer/command"
+    method: post
+    headers:
+      X-Api-Key: !secret octoprint_api_key
+    content_type: "application/json"
+    payload: '{"commands": {{ commands | tojson }}}'
+
+# Hold the last value set for speed, flow and fan (OctoPrint doesn't report them).
+input_number:
+  octoprint_speed_factor:
+    name: OctoPrint speed factor
+    min: 10
+    max: 200
+    step: 1
+    initial: 100
+  octoprint_flow_factor:
+    name: OctoPrint flow factor
+    min: 50
+    max: 150
+    step: 1
+    initial: 100
+  octoprint_fan_speed:
+    name: OctoPrint fan speed
+    min: 0
+    max: 100
+    step: 1
+    initial: 0
+
+template:
+  - button:
+      - name: "OctoPrint Emergency Stop"
+        unique_id: octoprint_emergency_stop
+        icon: mdi:alert-octagon
+        press:
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["M112"]
+      - name: "OctoPrint Home All Axes"
+        unique_id: octoprint_home_all_axes
+        icon: mdi:home
+        press:
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["G28"]
+      - name: "OctoPrint Home X Axis"
+        unique_id: octoprint_home_x_axis
+        press:
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["G28 X"]
+      - name: "OctoPrint Home Y Axis"
+        unique_id: octoprint_home_y_axis
+        press:
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["G28 Y"]
+      - name: "OctoPrint Home Z Axis"
+        unique_id: octoprint_home_z_axis
+        press:
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["G28 Z"]
+    number:
+      - name: "OctoPrint Speed Factor"
+        unique_id: octoprint_speed_factor
+        unit_of_measurement: "%"
+        min: 10
+        max: 200
+        step: 1
+        state: "{{ states('input_number.octoprint_speed_factor') }}"
+        set_value:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.octoprint_speed_factor
+            data:
+              value: "{{ value }}"
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["M220 S{{ value | int }}"]
+      - name: "OctoPrint Flow Factor"
+        unique_id: octoprint_flow_factor
+        unit_of_measurement: "%"
+        min: 50
+        max: 150
+        step: 1
+        state: "{{ states('input_number.octoprint_flow_factor') }}"
+        set_value:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.octoprint_flow_factor
+            data:
+              value: "{{ value }}"
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["M221 S{{ value | int }}"]
+      - name: "OctoPrint Fan Speed"
+        unique_id: octoprint_fan_speed
+        unit_of_measurement: "%"
+        min: 0
+        max: 100
+        step: 1
+        state: "{{ states('input_number.octoprint_fan_speed') }}"
+        set_value:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.octoprint_fan_speed
+            data:
+              value: "{{ value }}"
+          - action: rest_command.octoprint_gcode
+            data:
+              commands: ["M106 S{{ (value * 2.55) | round(0) | int }}"]
+
+# The card's jog arrows call script.<base_entity>_jog with axis and distance.
+script:
+  octoprint_jog:
+    alias: "OctoPrint Jog"
+    mode: queued
+    fields:
+      axis:
+        description: "x, y or z"
+      distance:
+        description: "mm, negative for the other direction"
+    sequence:
+      - action: rest_command.octoprint_gcode
+        data:
+          commands:
+            - "G91"
+            - "G0 {{ axis | upper }}{{ distance }} F{{ 600 if axis | lower == 'z' else 3000 }}"
+            - "G90"
