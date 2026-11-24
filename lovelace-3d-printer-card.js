@@ -773,15 +773,16 @@ class PrinterCard3D extends HTMLElement {
     this._fans.sort((x, y) => Number(isLight(x.entity_id)) - Number(isLight(y.entity_id)));
 
     const rotation = {};
+    const aspects = {};
     for (const c of (this._config.cameras || [])) {
       const e = typeof c === 'string' ? { entity: c, rotate: 0 } : c;
-      if (e.entity) rotation[e.entity] = e.rotate || 0;
+      if (e.entity) { rotation[e.entity] = e.rotate || 0; if (e.aspect) aspects[e.entity] = String(e.aspect).replace(':', ' / '); }
     }
     this._cameras = [];
     for (const [id, st] of Object.entries(this._hass.states)) {
       if (!id.startsWith('camera.') || !id.includes(b)) continue;
       if (st.attributes?.hidden === true || id === this._entities.thumbnail) continue;
-      this._cameras.push({ entity: id, label: label(st, id), rotate: rotation[id] ?? 0 });
+      this._cameras.push({ entity: id, label: label(st, id), rotate: rotation[id] ?? 0, aspect: aspects[id] });
     }
     this._cameras.sort((x, y) => x.entity.localeCompare(y.entity));
   }
@@ -1314,6 +1315,8 @@ class PrinterCard3D extends HTMLElement {
     const draw = root.getElementById('r-draw');
     if (draw) draw.style.display = cam && this._vm === 'camera' ? 'none' : '';
     wrap.parentElement?.classList.toggle('both', !!cam && this._vm === 'both');
+    wrap.parentElement?.classList.toggle('camonly', !!cam && this._vm === 'camera');
+    wrap.style.setProperty('--cam-ar', cam?.aspect || '16 / 9');
     if (!cam) {
       if (wrap.firstChild) wrap.replaceChildren();
       wrap.style.display = 'none';
@@ -1657,7 +1660,9 @@ button:disabled { cursor: default; opacity: .38; }
 .trow { display: flex; gap: 6px; }
 .view.both { height: auto; display: flex; flex-direction: column; }
 .view.both .draw { height: 230px; }
-.view.both .camwrap { position: relative; inset: auto; width: 100%; aspect-ratio: 16 / 9; border-top: 1px solid var(--line); }
+.view.both .camwrap { position: relative; inset: auto; width: 100%; aspect-ratio: var(--cam-ar, 16 / 9); border-top: 1px solid var(--line); }
+.view.camonly { height: auto; display: block; }
+.view.camonly .camwrap { position: relative; inset: auto; width: 100%; aspect-ratio: var(--cam-ar, 16 / 9); }
 .tabs:empty { display: none; }
 .tabs button { flex: 1; min-width: 0; height: 32px; border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text2); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .tabs button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
