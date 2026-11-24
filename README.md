@@ -114,6 +114,38 @@ entity_mappings: de_bambu_generic
 
 **Check the `entities/` folder** in the repo to see which mapping files are available (e.g. `en_generic.js`, `de_generic.js`, `de_bambu_generic.js`). Use the filename without `.js` as the value.
 
+**OctoPrint** (Home Assistant's built-in OctoPrint integration) — the mapping is built into the card and picked automatically when `sensor.<base_entity>_current_state` and `sensor.<base_entity>_actual_tool0_temp` exist, so `entity_mappings` can be left out (or set it to `octoprint`). It works with English and German HA. Hotend/bed targets are settable via the integration's number entities; pause/resume/cancel and the OctoPrint restart/reboot/shutdown buttons are mapped. The integration itself has no G-code service, fans, speed factor or emergency stop, so on its own Move, Tune and the emergency-stop button don't appear.
+
+To get them, add the helper package [`examples/octoprint_package.yaml`](examples/octoprint_package.yaml). It lets Home Assistant send G-code through OctoPrint's REST API (server-side, so no CORS or HTTPS setup is needed) and creates entities the card picks up automatically:
+
+| Entity | Card control | G-code |
+|---|---|---|
+| `button.octoprint_emergency_stop` | red emergency-stop button | `M112` |
+| `button.octoprint_home_all_axes`, `…_home_x_axis`, `…_home_y_axis`, `…_home_z_axis` | Move → Home | `G28` |
+| `script.octoprint_jog` | Move → jog arrows | `G91` / `G0` / `G90` |
+| `number.octoprint_speed_factor`, `number.octoprint_flow_factor` | Tune → Speed, Flow | `M220`, `M221` |
+| `number.octoprint_fan_speed` | Tune → fan bars | `M106` |
+
+Setup:
+
+1. Enable packages in `configuration.yaml` (once):
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+2. Copy the example to `/config/packages/`, replace `OCTOPRINT_HOST` with your OctoPrint address.
+3. Add your OctoPrint API key (OctoPrint → Settings → Application Keys) to `secrets.yaml` as `octoprint_api_key`.
+4. Check the configuration and restart Home Assistant.
+
+OctoPrint doesn't report speed, flow or fan values, so those show the last value set from Home Assistant. The toolhead position isn't available, so Move shows no X/Y/Z readout. Entity IDs follow the names in the file; if your `base_entity` isn't `octoprint`, rename them to match.
+
+```yaml
+type: custom:lovelace-3d-printer-card
+name: Prusa
+base_entity: octoprint
+printer_type: i3
+```
+
 **Compact glance card** (e.g. inside a room view), opening the full card in a dialog:
 
 ```yaml
@@ -151,10 +183,11 @@ power_switch: switch.printer_smart_plug
 |---|---|---|---|
 | `base_entity` | string | **Yes** | Entity name prefix, e.g. `voron_24` |
 | `name` | string | No | Display name shown in the card header |
-| `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, or `cantilever` |
-| `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`, `de_bambu_generic`). Default: `{hass.locale}_generic` or `en_generic` |
+| `printer_type` | string | No | `i3` (default), `corexy`, `corexy-flying-gantry`, `cantilever`, or `delta` |
+| `entity_mappings` | string | No | Entity mapping + UI locale. **Check the `entities/` folder** for available options (e.g. `en_generic`, `de_generic`, `de_bambu_generic`), or the built-in `octoprint`. Default: `octoprint` when OctoPrint entities are detected, else `{hass.locale}_generic` or `en_generic` |
 | `cameras` | list | No | Array of `{ entity, rotate }` for rotation overrides only |
 | `power_switch` | string | No | Switch entity ID for the printer's smart plug — adds a power button to the header |
+| `view` | string | No | Starting live view: `printer` (default), `both` (drawing above the camera) or `camera`. The toggle under the view switches it, and the choice is remembered per browser |
 | `variant` | string | No | `full` (default) or `compact`: a glance card whose "Full controls" opens the full card in a dialog |
 | `presets` | map | No | Target presets per heater, keyed by `hotend`, `bed`, a heater's sensor or target entity ID, or its label. Each item is `{ name, value }` or a number. Defaults: hotend PLA 215 / PETG 245 / ABS 260, bed PLA 60 / PETG 80 / ABS 100 |
 
@@ -256,6 +289,7 @@ With the plug off (or Moonraker unreachable) the card shows only the header, an 
 | `corexy` | CoreXY — gantry fixed at top, bed moves down with object |
 | `corexy-flying-gantry` | CoreXY Voron 2.4 — flying gantry moves up with object, fixed bed |
 | `cantilever` | Cantilever (Ender-style) — single upright, cantilevered X arm |
+| `delta` | Delta (Kossel/Rostock) — side view: three towers (back one faint), carriages and arm pairs follow the effector |
 
 ---
 
@@ -307,9 +341,23 @@ The card relies on entity mapping files to discover printer entities and transla
 
 4. Submit a PR with the new file and a short note in the PR description.
 
+Optional mapping keys (all used by the built-in OctoPrint mapping):
+
+- `ignore` — regexes tested against the entity suffix; matching entities are skipped (e.g. `['^target_']`).
+- `hide_unavailable` — `true` drops extra temperature sensors that are unavailable or unknown.
+- `status_map` — maps the lower-cased status text to the card's states (`printing`, `paused`, `ready`, `standby`, `error`, `offline`, …).
+- `label_strip` — regexes removed from friendly names before they're used as labels.
+
 ---
 
 ## Changelog
+
+**Unreleased**
+- New: OctoPrint support via a built-in mapping, auto-detected from the OctoPrint integration's entities (English and German HA).
+- New: example package `examples/octoprint_package.yaml` adds emergency stop, homing, jogging, speed/flow and fan control for OctoPrint printers.
+- New: optional mapping keys `ignore`, `hide_unavailable`, `status_map` and `label_strip`.
+- New: `printer_type: delta` side-view drawing; while printing the effector sweeps and the carriages follow it with constant-length rods.
+- New: live view toggle Printer / Both / Camera (`view` option), with a camera picker when there are several cameras.
 
 **3.0.1**
 - Fixed: the compact card's dialog no longer closes by itself when the dashboard redraws (for example right after you change a setting).
@@ -331,5 +379,5 @@ The card relies on entity mapping files to discover printer entities and transla
 ## Requirements
 
 - Home Assistant 2023.4 or newer (a browser with CSS container queries)
-- Moonraker integration installed and printer entities exposed to HA
+- Moonraker integration installed and printer entities exposed to HA (or the OctoPrint integration, see above)
 - No additional HACS frontend cards required
