@@ -436,56 +436,48 @@ function deltaSvg(s, c) {
 function printerSvg(type, s) {
   const t = (type || 'i3').toLowerCase();
   const p = clamp(s.p || 0, 0, 1);
-  if (t === 'delta') {
-    return deltaSvg(s, {
-      p,
-      HOT: s.hot ? '#ff7a45' : '#5a6170',
-      BED: s.bed ? '#3fa9ff' : '#4a5160',
-      FR: 'rgba(255,255,255,.16)',
-      OBJ: '#5eead4',
-    });
-  }
   const HOT = s.hot ? '#ff7a45' : '#5a6170';
   const BED = s.bed ? '#3fa9ff' : '#4a5160';
   const FR = 'rgba(255,255,255,.16)';
   const OBJ = '#5eead4';
+  if (t === 'delta') return deltaSvg(s, { p, HOT, BED, FR, OBJ });
+
+  // Same style as the delta: open frame of posts and bars, carriages on the
+  // posts, a solid orange toolhead that sweeps sinusoidally while printing.
+  const ORANGE = '#ff7a45';
   const cx = 125, objMax = 92, objW = 50;
   const objH = objMax * p;
   const movingBed = t === 'corexy';
   const nozzleY = movingBed ? 66 : 182 - objH - 2;
   const bedTop = movingBed ? nozzleY + 2 + objH : 182;
+  const barY = nozzleY - 20;
 
-  let frame = '';
-  if (t === 'i3') {
-    frame = `<rect x="26" y="198" width="198" height="10" rx="4" fill="rgba(255,255,255,.08)"/>
-      <rect x="36" y="18" width="10" height="182" rx="3" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
-      <rect x="204" y="18" width="10" height="182" rx="3" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
-      <line x1="41" y1="20" x2="209" y2="20" stroke="${FR}" stroke-width="3" stroke-linecap="round"/>
-      <rect x="33" y="${nozzleY - 27}" width="16" height="14" rx="3" fill="#252b36" stroke="${FR}"/>
-      <rect x="201" y="${nozzleY - 27}" width="16" height="14" rx="3" fill="#252b36" stroke="${FR}"/>`;
-  } else if (t === 'cantilever') {
-    frame = `<rect x="26" y="198" width="198" height="10" rx="4" fill="rgba(255,255,255,.08)"/>
-      <rect x="38" y="16" width="14" height="184" rx="4" fill="#141821" stroke="${FR}" stroke-width="1.5"/>
-      <rect x="34" y="${nozzleY - 28}" width="22" height="16" rx="3" fill="#252b36" stroke="${FR}"/>`;
+  const post = (x, faint) => `<rect x="${x - 5}" y="18" width="10" height="182" rx="3" fill="#141821" stroke="${FR}" stroke-width="1.5" ${faint ? 'opacity=".3"' : ''}/>`;
+  const hbar = (y, x1 = 41, x2 = 209) => `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${FR}" stroke-width="3" stroke-linecap="round"/>`;
+  const car = (x, y) => `<rect x="${x - 8}" y="${y}" width="16" height="13" rx="3" fill="#252b36" stroke="${FR}"/>`;
+  const rail = (x1, x2) => `<line x1="${x1}" y1="${barY}" x2="${x2}" y2="${barY}" stroke="rgba(255,255,255,.4)" stroke-width="3" stroke-linecap="round"/>`;
+  const base = `<rect x="26" y="198" width="198" height="10" rx="4" fill="rgba(255,255,255,.08)"/>`;
+
+  let frame, gantry;
+  if (t === 'cantilever') {
+    frame = `${base}${post(45)}`;
+    gantry = `${rail(45, 214)}${car(45, barY - 6)}`;
+  } else if (t === 'i3') {
+    frame = `${base}${post(41)}${post(209)}${hbar(20)}`;
+    gantry = `${rail(41, 209)}${car(41, barY - 6)}${car(209, barY - 6)}`;
   } else {
-    frame = `<rect x="22" y="14" width="206" height="200" rx="10" fill="#0f1218" stroke="${FR}" stroke-width="2"/>
-      <rect x="30" y="22" width="190" height="184" rx="6" fill="none" stroke="rgba(255,255,255,.05)"/>
-      ${[22, 228].map((x) => `<rect x="${x - 4}" y="10" width="8" height="8" rx="2" fill="${FR}"/><rect x="${x - 4}" y="210" width="8" height="8" rx="2" fill="${FR}"/>`).join('')}
-      ${s.cham ? `<rect x="30" y="22" width="190" height="184" rx="6" fill="#a78bfa" opacity=".07"><animate attributeName="opacity" values=".05;.13;.05" dur="3s" repeatCount="indefinite"/></rect>` : ''}`;
+    // corexy / corexy-flying-gantry: front posts, faint back posts, top and bottom bars.
+    frame = `${base}${post(70, true)}${post(180, true)}${post(41)}${post(209)}${hbar(20)}${hbar(196)}
+      ${s.cham ? `<rect x="46" y="22" width="158" height="172" rx="4" fill="#a78bfa" opacity=".07"><animate attributeName="opacity" values=".05;.13;.05" dur="3s" repeatCount="indefinite"/></rect>` : ''}`;
+    gantry = `${rail(41, 209)}${car(41, barY - 6)}${car(209, barY - 6)}`;
   }
 
-  const barY = nozzleY - 20;
-  const bar = t === 'cantilever'
-    ? `<line x1="52" y1="${barY}" x2="214" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`
-    : t === 'i3'
-      ? `<line x1="46" y1="${barY}" x2="204" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`
-      : `<line x1="34" y1="${barY}" x2="216" y2="${barY}" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/>`;
-
-  // Object: finished layers, plus a faint outline of the whole part on fixed beds.
   const obj = layersSvg(cx, bedTop, objW, objMax, p, OBJ, !movingBed);
-
   const zRods = movingBed
-    ? `<path d="M60 ${bedTop + 7}V206M190 ${bedTop + 7}V206" stroke="rgba(255,255,255,.14)" stroke-width="1.5" stroke-dasharray="4 3"/>`
+    ? `<path d="M70 ${bedTop + 7}V196M180 ${bedTop + 7}V196" stroke="rgba(255,255,255,.14)" stroke-width="1.5" stroke-dasharray="4 3"/>`
+    : '';
+  const sweep = s.printing
+    ? `<animateTransform attributeName="transform" type="translate" values="${Array.from({ length: 25 }, (_, i) => `${(30 * Math.sin((2 * Math.PI * i) / 24)).toFixed(1)} 0`).join(';')}" dur="2.6s" repeatCount="indefinite"/>`
     : '';
 
   return `<svg viewBox="0 0 250 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Printer">
@@ -497,12 +489,13 @@ function printerSvg(type, s) {
   ${zRods}
   ${s.bed ? `<ellipse cx="${cx}" cy="${bedTop + 3}" rx="96" ry="15" fill="url(#p3g2)"><animate attributeName="opacity" values=".7;1;.7" dur="2.6s" repeatCount="indefinite"/></ellipse>` : ''}
   ${obj}
-  <rect x="44" y="${bedTop}" width="162" height="7" rx="3" fill="${BED}" opacity="${s.bed ? 0.9 : 0.55}"/>
-  ${bar}
-  <g transform="translate(${cx} ${nozzleY})"><g class="${s.printing ? 'th-run' : ''}">
+  <rect x="50" y="${bedTop}" width="150" height="7" rx="3" fill="${BED}" opacity="${s.bed ? 0.9 : 0.55}"/>
+  ${gantry}
+  <g transform="translate(${cx} ${nozzleY})"><g transform="translate(0 0)">${sweep}
     ${s.hot ? `<ellipse cx="0" cy="4" rx="20" ry="12" fill="url(#p3g1)"/>` : ''}
-    <rect x="-14" y="-31" width="28" height="22" rx="5" fill="#252b36" stroke="${HOT}" stroke-width="1.5"/>
-    <path d="M-4 -9h8l-4 7z" fill="${HOT}"/>
+    <rect x="-11" y="-27" width="22" height="14" rx="3" fill="${ORANGE}"/>
+    <rect x="-6" y="-13" width="12" height="11" rx="2" fill="${ORANGE}"/>
+    <path d="M-4 -2h8l-4 6z" fill="${ORANGE}"/>
   </g></g>
 </svg>`;
 }
@@ -1667,8 +1660,6 @@ button:disabled { cursor: default; opacity: .38; }
 .tabs button { flex: 1; min-width: 0; height: 32px; border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text2); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .tabs button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tabs button.on { background: rgba(255,255,255,.08); color: var(--text); }
-.th-run { animation: sweep 2.6s ease-in-out infinite alternate; }
-@keyframes sweep { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
 
 /* progress */
 .prog { border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); padding: 16px 16px 14px; }
